@@ -1,0 +1,4 @@
+function detc=f_hay_detectores
+
+disp('  ')
+input='Ingrese  0 si hau detectore; >0 si no hay detec'

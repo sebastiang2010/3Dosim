@@ -1,0 +1,5 @@
+Version 3.01 
+
+Se modifico el grafico de HDV Modulo 3 
+Se modifico la carga de DICOM se ordena antes de leer 
+Hay que modificar Matlab para que grave mas de 2 Gb archivos

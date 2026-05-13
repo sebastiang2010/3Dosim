@@ -1,0 +1,91 @@
+function ok=f_genero_voxel_2(A,archivo)
+
+%% como esta seleccionada a aca tomo todo
+[fi,co,n]=size(A);
+
+nvoxel=fi*co*n;
+%% abro el archivo
+fid=fopen(archivo, 'a+'); %agrgar datos al archivo
+
+%% genero el voxel
+fprintf(fid,'     ');
+corte=60;
+cont=0;
+cont1=0;
+r=-1;
+b=-1;
+t_old=[]; 
+txt1=[];
+for i=1:n
+    w=A(:,:,i);
+    for l=1:fi
+        for m=1:co
+            cont1=cont1+1;
+            if b==w(l,m);
+                r=r+1;
+            else
+                if r>=1;
+                    if r==1;
+                        t=' r';
+                        txt1=[t_old,t];
+                        if size(txt1,2)-1>corte; 
+                            fprintf(fid,t_old); 
+                            fprintf(fid,' \n');
+                            fprintf(fid,'     ');
+                            t_old=t;
+                        else 
+                            t_old=txt1;
+                        end
+                        cont=cont+1;
+                    else
+                        t=[num2str(r),'r'];
+                        txt1=[t_old,' ',t];
+                        t_old=txt1; 
+                        if size(txt1,2)-1>corte;
+                            fprintf(fid,t_old);
+                            fprintf(fid,' \n');
+                            fprintf(fid,'     ');
+                            t_old=t;
+                        else
+                            t_old=txt1;
+                        end
+                        cont=cont+r;
+                    end
+                end
+                t=num2str(w(l,m));
+                txt1=[t_old,' ',t];
+%                 if size(txt1,2)-1>corte;
+%                     fprintf(fid,t_old);
+%                     fprintf(fid,' \n');
+%                     fprintf(fid,'     ');
+%                     t_old=t;
+%                 else
+%                     t_old=txt1;
+%                 end
+                t_old=txt1; 
+                cont=cont+1;
+                r=0;
+            end
+            b=w(l,m);
+        end
+    end
+end
+
+if r>=1;
+    if r==1;
+        fprintf(fid,' r');
+        cont=cont+1;
+        %n1=n1+1;
+    else
+        fprintf(fid,' %g',r);
+        fprintf(fid,'r');
+        cont=cont+r;
+    end
+end
+fprintf(fid,'\n');
+
+%% cierro el archivo
+fclose(fid);
+
+ok=-1;
+if cont==nvoxel;ok=1;end

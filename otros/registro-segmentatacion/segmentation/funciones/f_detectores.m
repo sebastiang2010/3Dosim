@@ -1,0 +1,27 @@
+function detectores=f_detectores 
+
+n=0; 
+%%modificar los materiales con los de mi lista; 
+%% detector de task 1
+n=n+1;
+cell{n,1}='111 51 -1.55      -511  530  -531                         imp:p=1   $ carbon window';
+cell{n,2}='112 52 -5.32      -511  533  -5341                        imp:p=1   $ Ge (dead layer)';
+cell{n,3}='113 52 -5.32      -511  5341 -537                         imp:p=1   $ Ge (active vol)'; 
+cell{n,4}='114 53 -1.    512 -513  536  -538                         imp:p=1   $ insulator'; 
+cell{n,5}='115 54 -8.96  511 -513  535  -538  #114                   imp:p=1   $ crystal holder'; 
+cell{n,6}='116 55 -7.9  (511 -515  530  -532):(514 -515  532 -538):(-515 538 -539) imp:p=1 $ end cap'; 
+cell{n,7}='117  0            -515  531  -538  #112 #113 #114 #115 #116   imp:p=1  $ vacio'; 
+ 
+sup{n,1}='c Detector 1.1 cylinders'; 
+sup{n,2}='510 1 rcc 0 -4.125 0 0 0 3.457 4.125';
+sup{n,3}='511 1 c/z 0 -4.125 3.5     $ Ge';
+sup{n,4}='512 1 c/z 0 -4.125 3.6     $ internal crystal holder';
+sup{n,5}='513 1 c/z 0 -4.125 3.817   $ external crystal holder';
+sup{n,6}='514 1 c/z 0 -4.125 3.968   $ internal end cap';
+sup{n,7}='515 1 c/z 0 -4.125 4.125   $ external end cap';
+
+detectores(n,1).cell=cell{n,:}; 
+detectores(n,1).sup=sup{n,:};
+detectores(n,1).CeldaActiva=511;
+detectores(n,1).Materiales=[];
+

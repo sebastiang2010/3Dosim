@@ -1,0 +1,183 @@
+clc 
+close all 
+% 
+PET=paciente.PET_original; 
+CT=paciente.CT; 
+
+info_PET=paciente.info_PET; 
+info_CT=paciente.info_CT; 
+
+vPET=[4.07,4.07,2]; 
+vCT=[0.8,0.8,2];
+orientationPET=info_PET.ImageOrientationPatient; 
+ippPET=info_PET.ImagePositionPatient; 
+orientationCT=info_PET.ImageOrientationPatient; 
+ippCT=info_CT.ImagePositionPatient; 
+% Leer el archivo DICOM
+%dicom_path = 'ruta_a_tu_archivo.dcm'; % Cambia esto por la ruta a tu archivo DICOM
+%info = dicominfo(dicom_path);
+
+R_PET=imref3d(size(PET),[ippPET(1) ippPET(1)+vPET(1)*size(PET,1)],[ippPET(2) ippPET(2)+vPET(2)*size(PET,2)],[ippPET(3) ippPET(3)+vPET(3)*size(PET,3)]);
+R_CT=imref3d(size(CT),[ippCT(1) ippCT(1)+vCT(1)*size(CT,1)],[ippCT(2) ippCT(2)+vCT(2)*size(CT,2)],[ippCT(3) ippCT(3)+vCT(3)*size(CT,3)]);
+
+%%PET 
+x_dir = orientationPET(1:3); % Dirección del eje X
+y_dir = orientationPET(4:6); % Dirección del eje Y
+
+% Determinar el sistema de coordenadas
+% En LPS: X (Izquierda-Derecha), Y (Posterior-Anterior), Z (Superior-Inferior)
+% En RAS: X (Derecha-Izquierda), Y (Anterior-Posterior), Z (Superior-Inferior)
+if x_dir(1) >= 0 % Dirección X positiva
+    if y_dir(2) >= 0 % Dirección Y positiva
+        disp('El sistema de coordenadas es LPS.');
+    else
+        disp('El sistema de coordenadas es RAS.');
+    end
+else % Dirección X negativa
+    if y_dir(2) < 0 % Dirección Y negativa
+        disp('El sistema de coordenadas es LPS.');
+    else
+        disp('El sistema de coordenadas es RAS.');
+    end
+end
+%% CT 
+x_dir = orientationCT(1:3); % Dirección del eje X
+y_dir = orientationCT(4:6); % Dirección del eje Y
+
+% Determinar el sistema de coordenadas
+% En LPS: X (Izquierda-Derecha), Y (Posterior-Anterior), Z (Superior-Inferior)
+% En RAS: X (Derecha-Izquierda), Y (Anterior-Posterior), Z (Superior-Inferior)
+if x_dir(1) >= 0 % Dirección X positiva
+    if y_dir(2) >= 0 % Dirección Y positiva
+        disp('El sistema de coordenadas es LPS.');
+    else
+        disp('El sistema de coordenadas es RAS.');
+    end
+else % Dirección X negativa
+    if y_dir(2) < 0 % Dirección Y negativa
+        disp('El sistema de coordenadas es LPS.');
+    else
+        disp('El sistema de coordenadas es RAS.');
+    end
+end
+%% 
+nI =size(PET,1);   % Tamaño en la dimensión I
+nJ = size(PET,2);   % Tamaño en la dimensión J
+nK = size(PET,3);   % Tamaño en la dimensión K
+
+% Supongamos que ya tienes la imagen cargada como un volumen 3D
+% A continuación se usa una imagen de ejemplo (puedes cargar tu propia imagen)
+image_volume = PET;  % Imagen aleatoria para ilustrar
+
+% Definir la matriz de transformación (4x4) previamente discutida
+A = [4.07 0 0 -405.23;
+     0 4.07 0 -582.41;
+     0 0 2.0 -8.5;
+     0 0 0 1];
+
+%LSP to RAS 
+tform = affine3d([ -1 0 0 0; 
+                   0 -1 0 0; 
+                   0 0 1 0; 
+                   0 0 0 1]);
+
+% 
+[PET_RAS,R_PET_RAS]=imwarp(PET,R_PET,tform); %,interp);
+[CT_RAS,R_CT_RAS]=imwarp(CT,R_CT,tform); 
+
+R_PET2=imref2d(size(PET),R_PET_RAS.XWorldLimits,R_PET_RAS.YWorldLimits); 
+R_CT2=imref2d(size(CT),R_CT_RAS.XWorldLimits,R_CT_RAS.YWorldLimits);
+
+
+a=double(CT_RAS(:,:,67)); 
+b=PET_RAS(:,:,67); 
+
+a = flipud(a);
+b=flipup(b)
+
+figure(101)
+ax1 = axes;
+imshow(a ./ max(a(:)), R_CT2, 'Parent', ax1);  
+hold on
+ax2 = axes;
+h = imshow(b, R_PET2, 'Parent', ax2);  % Mostrar PET en su sistema de referencia
+set(ax2, 'Color', 'none');  % Hacer transparente el fondo de ax2
+set(h, 'AlphaData', 0.5);  % Ajustar transparencia de la imagen PET
+colormap(ax2, jet);
+colorbar(ax2);  % Agregar una barra de color solo para la imagen PET (opcional)
+%linkaxes([ax1, ax2],'xy');
+axis(ax1, 'off');   % Mostrar ejes si quieres visualizar las coordenadas
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%%
+
+
+% Generar los índices de voxel (i, j, k)
+[i, j, k] = ndgrid(1:nI, 1:nJ, 1:nK);
+voxel_coords = [i(:), j(:), k(:)]';  % Aplanar a una matriz 3xN
+
+% Añadir un 1 para la coordenada homogénea
+homogeneous_voxel_coords = [voxel_coords; ones(1, numel(i))];
+
+% Transformar las coordenadas de DICOM a RAS
+ras_coords = A * homogeneous_voxel_coords;
+ras_coords = ras_coords(1:3, :);  % Extraer las coordenadas (X, Y, Z)
+
+% Ahora las coordenadas ras_coords contienen las posiciones en RAS
+
+% Visualizar un corte de la imagen en RAS (ejemplo para un corte específico)
+slice_index = 64;  % El índice de corte en el eje Z (puedes cambiarlo)
+
+% Muestra el corte 2D en el plano Z
+figure;
+imagesc(squeeze(image_volume(:,:,slice_index))); 
+axis equal;
+title(['Corte en Z = ', num2str(slice_index)]);
+xlabel('Posición en I');
+ylabel('Posición en J');
+
+% Para visualizar en 3D: Muestra un volumen en 3D usando imágenes con coordenadas RAS
+figure;
+slice(ras_coords(1,:), ras_coords(2,:), ras_coords(3,:), image_volume, [], [], -640.5); % Corte Z
+
+% Ajustes de visualización para la imagen
+colormap('gray');
+colorbar;
+xlabel('Posición en X (RAS)');
+ylabel('Posición en Y (RAS)');
+zlabel('Posición en Z (RAS)');
+title('Visualización en 3D de la imagen transformada');
+
+
+% Matriz de transformación de ijk a RAS
+A = [-4.07 0 0  405.23;
+     0 -4.07 0  596.76;
+     0 0 2.0   -640.5;
+     0 0 0 1];
+
+% Coordenadas de un voxel (0, 0, 0) en el sistema ijk
+voxel_ijk = [0, 0, 0, 1]';  % Coordenadas homogéneas (X, Y, Z, 1)
+
+% Aplicar la transformación de ijk a RAS
+pos_RAS = A * voxel_ijk;
+
+% Mostrar la posición en RAS
+disp('Posición en RAS del voxel (0, 0, 0):');
+disp(pos_RAS(1:3));  % Las coordenadas X, Y, Z en RAS

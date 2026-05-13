@@ -1,0 +1,21 @@
+function f_g_importancias(archivo,tvoxel,image_size)
+
+fid=fopen(archivo, 'a+');
+% wwg   14 0  0 %tally celda donde esra la fuente peso minimo (0)
+% mesh  geom=rec
+%       ref=0 0 -2.5
+%       origin= -27  -27  -22
+%       imesh=    -24  2  24  27
+%       iints=   1   8   8   1
+%       jmesh=    -24  2  24   27 
+%       jints=   1    8  8  1     
+%       kmesh=     89    117  152
+%       kints=   10   40    1
+
+fprintf(fid,'c mesh \n'); 
+fprintf(fid,'wwg  14 0 0 \n'); %revisar 
+fprintf(fid,'mesh geom=rec \n'); 
+%fprintf(fid,ref=)
+
+
+

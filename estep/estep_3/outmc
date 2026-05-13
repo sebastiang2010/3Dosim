@@ -1,0 +1,1192 @@
+ mcnpx    ver=2.7.0 ld=Mon Apr 18 08:00:00 MST 2011   11/01/16 16:23:32
+
+ *************************************************************
+ *                                                           *
+ *                   MCNPX                                   *
+ *                                                           *
+ * Copyright 2007. Los Alamos National Security, LLC.        *
+ * All rights reserved.                                      *
+ *                                                           *
+ * This material was produced under U.S. Government contract *
+ * DE-AC52-06NA25396 for Los Alamos National Laboratory,     *
+ * which is operated by Los Alamos National Security, LLC    *
+ * for the U.S. Department of Energy. The Government is      *
+ * granted for itself and others acting on its behalf a      *
+ * paid-up, nonexclusive, irrevocable worldwide license in   *
+ * this material to reproduce, prepare derivative works, and *
+ * works, and perform publicly and display publicly.         *
+ * Beginning five (5) years after June 1, 2006, subject to   *
+ * additional five-year worldwide renewals, the Government   *
+ * is granted for itself and others acting on its behalf     *
+ * a paid-up, nonexclusive, irrevocable worldwide license    *
+ * in this material to reproduce, prepare derivative works,  *
+ * distribute copies to the public, perform publicly and     *
+ * display publicly, and to permit others to do so.          *
+ *                                                           *
+ * NEITHER THE UNITED STATES NOR THE UNITED STATES           *
+ * DEPARTMENT OF ENERGY, NOR LOS ALAMOS NATIONAL SECURITY,   *
+ * LLC, NOR ANY OF THEIR EMPLOYEES, MAKES ANY WARRANTY,      *
+ * EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL LIABILITY OR     *
+ * RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR         *
+ * USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR     *
+ * PROCESS DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT   *
+ * INFRINGE PRIVATELY OWNED RIGHTS.                          *
+ *                                                           *
+ *************************************************************
+ phys:e 3 12j 0.99 $MCNP 6.0                                          
+ fatal error.  too many entries.  maximum is    11
+ 
+ warning.     3 surfaces were deleted for being the same as others.
+ warning.  surface      1.2 appears more than once in a chain.
+ warning.  surface      1.4 appears more than once in a chain.
+ warning.  surface      1.6 appears more than once in a chain.
+ warning.  surface      2.1 appears more than once in a chain.
+ warning.  surface      2.3 appears more than once in a chain.
+ warning.  surface      2.5 appears more than once in a chain.
+ imcn   is done
+ mcnpx    ver=2.7.0 ld=Mon Apr 18 08:00:00 MST 2011   11/01/16 16:23:52
+
+ *************************************************************
+ *                                                           *
+ *                   MCNPX                                   *
+ *                                                           *
+ * Copyright 2007. Los Alamos National Security, LLC.        *
+ * All rights reserved.                                      *
+ *                                                           *
+ * This material was produced under U.S. Government contract *
+ * DE-AC52-06NA25396 for Los Alamos National Laboratory,     *
+ * which is operated by Los Alamos National Security, LLC    *
+ * for the U.S. Department of Energy. The Government is      *
+ * granted for itself and others acting on its behalf a      *
+ * paid-up, nonexclusive, irrevocable worldwide license in   *
+ * this material to reproduce, prepare derivative works, and *
+ * works, and perform publicly and display publicly.         *
+ * Beginning five (5) years after June 1, 2006, subject to   *
+ * additional five-year worldwide renewals, the Government   *
+ * is granted for itself and others acting on its behalf     *
+ * a paid-up, nonexclusive, irrevocable worldwide license    *
+ * in this material to reproduce, prepare derivative works,  *
+ * distribute copies to the public, perform publicly and     *
+ * display publicly, and to permit others to do so.          *
+ *                                                           *
+ * NEITHER THE UNITED STATES NOR THE UNITED STATES           *
+ * DEPARTMENT OF ENERGY, NOR LOS ALAMOS NATIONAL SECURITY,   *
+ * LLC, NOR ANY OF THEIR EMPLOYEES, MAKES ANY WARRANTY,      *
+ * EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL LIABILITY OR     *
+ * RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR         *
+ * USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR     *
+ * PROCESS DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT   *
+ * INFRINGE PRIVATELY OWNED RIGHTS.                          *
+ *                                                           *
+ *************************************************************
+ 
+ warning.     3 surfaces were deleted for being the same as others.
+ warning.  surface      1.2 appears more than once in a chain.
+ warning.  surface      1.4 appears more than once in a chain.
+ warning.  surface      1.6 appears more than once in a chain.
+ warning.  surface      2.1 appears more than once in a chain.
+ warning.  surface      2.3 appears more than once in a chain.
+ warning.  surface      2.5 appears more than once in a chain.
+ imcn   is done
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ no plot because it would have been empty.
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ mcnpx    ver=2.7.0 ld=Mon Apr 18 08:00:00 MST 2011   11/01/16 16:26:37
+
+ *************************************************************
+ *                                                           *
+ *                   MCNPX                                   *
+ *                                                           *
+ * Copyright 2007. Los Alamos National Security, LLC.        *
+ * All rights reserved.                                      *
+ *                                                           *
+ * This material was produced under U.S. Government contract *
+ * DE-AC52-06NA25396 for Los Alamos National Laboratory,     *
+ * which is operated by Los Alamos National Security, LLC    *
+ * for the U.S. Department of Energy. The Government is      *
+ * granted for itself and others acting on its behalf a      *
+ * paid-up, nonexclusive, irrevocable worldwide license in   *
+ * this material to reproduce, prepare derivative works, and *
+ * works, and perform publicly and display publicly.         *
+ * Beginning five (5) years after June 1, 2006, subject to   *
+ * additional five-year worldwide renewals, the Government   *
+ * is granted for itself and others acting on its behalf     *
+ * a paid-up, nonexclusive, irrevocable worldwide license    *
+ * in this material to reproduce, prepare derivative works,  *
+ * distribute copies to the public, perform publicly and     *
+ * display publicly, and to permit others to do so.          *
+ *                                                           *
+ * NEITHER THE UNITED STATES NOR THE UNITED STATES           *
+ * DEPARTMENT OF ENERGY, NOR LOS ALAMOS NATIONAL SECURITY,   *
+ * LLC, NOR ANY OF THEIR EMPLOYEES, MAKES ANY WARRANTY,      *
+ * EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL LIABILITY OR     *
+ * RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR         *
+ * USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR     *
+ * PROCESS DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT   *
+ * INFRINGE PRIVATELY OWNED RIGHTS.                          *
+ *                                                           *
+ *************************************************************
+ 
+ warning.     3 surfaces were deleted for being the same as others.
+ warning.  surface      1.2 appears more than once in a chain.
+ warning.  surface      1.4 appears more than once in a chain.
+ warning.  surface      1.6 appears more than once in a chain.
+ warning.  surface      2.1 appears more than once in a chain.
+ warning.  surface      2.3 appears more than once in a chain.
+ warning.  surface      2.5 appears more than once in a chain.
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ plot   is done
+ warning. simple physics turned on for photons > e mev.               
+ nps =         0      e  = 3.0000E+00                     
+ dump    1 on file rved   nps =           0  coll =              0
+                              ctm =      0.00     nrn =              0
+
+ xact   is done
+ dynamic storage =         0 words,          0 bytes.      cp0 =  0.01
+ run terminated when it had used    0 minutes of computer time.
+ warning.  tally  18 tfc bin did not pass  3 of 10 statistical checks.
+ warning.  tally  28 tfc bin did not pass  3 of 10 statistical checks.
+ warning.  tally  38 tfc bin did not pass  3 of 10 statistical checks.
+ warning.     3 of   3 tallies did not pass all 10 statistical checks.
+ warning.     3 of   3 tallies had bins with large relative errors.
+ dump    2 on file rved   nps =         249  coll =         398554
+                              ctm =      2.52     nrn =        2504220
+
+ tally data written to file mcved                                   
+ mcrun  is done
+ mcnpx    ver=2.7.0 ld=Mon Apr 18 08:00:00 MST 2011   11/01/16 16:29:02
+
+ *************************************************************
+ *                                                           *
+ *                   MCNPX                                   *
+ *                                                           *
+ * Copyright 2007. Los Alamos National Security, LLC.        *
+ * All rights reserved.                                      *
+ *                                                           *
+ * This material was produced under U.S. Government contract *
+ * DE-AC52-06NA25396 for Los Alamos National Laboratory,     *
+ * which is operated by Los Alamos National Security, LLC    *
+ * for the U.S. Department of Energy. The Government is      *
+ * granted for itself and others acting on its behalf a      *
+ * paid-up, nonexclusive, irrevocable worldwide license in   *
+ * this material to reproduce, prepare derivative works, and *
+ * works, and perform publicly and display publicly.         *
+ * Beginning five (5) years after June 1, 2006, subject to   *
+ * additional five-year worldwide renewals, the Government   *
+ * is granted for itself and others acting on its behalf     *
+ * a paid-up, nonexclusive, irrevocable worldwide license    *
+ * in this material to reproduce, prepare derivative works,  *
+ * distribute copies to the public, perform publicly and     *
+ * display publicly, and to permit others to do so.          *
+ *                                                           *
+ * NEITHER THE UNITED STATES NOR THE UNITED STATES           *
+ * DEPARTMENT OF ENERGY, NOR LOS ALAMOS NATIONAL SECURITY,   *
+ * LLC, NOR ANY OF THEIR EMPLOYEES, MAKES ANY WARRANTY,      *
+ * EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL LIABILITY OR     *
+ * RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR         *
+ * USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR     *
+ * PROCESS DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT   *
+ * INFRINGE PRIVATELY OWNED RIGHTS.                          *
+ *                                                           *
+ *************************************************************
+ 
+ warning.     3 surfaces were deleted for being the same as others.
+ warning.  surface      1.2 appears more than once in a chain.
+ warning.  surface      1.4 appears more than once in a chain.
+ warning.  surface      1.6 appears more than once in a chain.
+ warning.  surface      2.1 appears more than once in a chain.
+ warning.  surface      2.3 appears more than once in a chain.
+ warning.  surface      2.5 appears more than once in a chain.
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ plot   is done
+ warning. simple physics turned on for photons > e mev.               
+ nps =         0      e  = 3.0000E+00                     
+ dump    1 on file rved   nps =           0  coll =              0
+                              ctm =      0.00     nrn =              0
+
+ xact   is done
+ dynamic storage =         0 words,          0 bytes.      cp0 =  0.01
+ run terminated when it had used    0 minutes of computer time.
+ warning.  tally  18 tfc bin did not pass  2 of 10 statistical checks.
+ warning.  tally  28 tfc bin did not pass  1 of 10 statistical checks.
+ warning.  tally  38 tfc bin did not pass  1 of 10 statistical checks.
+ warning.     3 of   3 tallies did not pass all 10 statistical checks.
+ warning.     1 of   3 tallies had bins with large relative errors.
+ dump    2 on file rved   nps =        7316  coll =       11870517
+                              ctm =      0.28     nrn =       74552416
+
+ tally data written to file mcved                                   
+ mcrun  is done
+ mcnpx    ver=2.7.0 ld=Mon Apr 18 08:00:00 MST 2011   11/01/16 16:29:51
+
+ *************************************************************
+ *                                                           *
+ *                   MCNPX                                   *
+ *                                                           *
+ * Copyright 2007. Los Alamos National Security, LLC.        *
+ * All rights reserved.                                      *
+ *                                                           *
+ * This material was produced under U.S. Government contract *
+ * DE-AC52-06NA25396 for Los Alamos National Laboratory,     *
+ * which is operated by Los Alamos National Security, LLC    *
+ * for the U.S. Department of Energy. The Government is      *
+ * granted for itself and others acting on its behalf a      *
+ * paid-up, nonexclusive, irrevocable worldwide license in   *
+ * this material to reproduce, prepare derivative works, and *
+ * works, and perform publicly and display publicly.         *
+ * Beginning five (5) years after June 1, 2006, subject to   *
+ * additional five-year worldwide renewals, the Government   *
+ * is granted for itself and others acting on its behalf     *
+ * a paid-up, nonexclusive, irrevocable worldwide license    *
+ * in this material to reproduce, prepare derivative works,  *
+ * distribute copies to the public, perform publicly and     *
+ * display publicly, and to permit others to do so.          *
+ *                                                           *
+ * NEITHER THE UNITED STATES NOR THE UNITED STATES           *
+ * DEPARTMENT OF ENERGY, NOR LOS ALAMOS NATIONAL SECURITY,   *
+ * LLC, NOR ANY OF THEIR EMPLOYEES, MAKES ANY WARRANTY,      *
+ * EXPRESS OR IMPLIED, OR ASSUMES ANY LEGAL LIABILITY OR     *
+ * RESPONSIBILITY FOR THE ACCURACY, COMPLETENESS, OR         *
+ * USEFULNESS OF ANY INFORMATION, APPARATUS, PRODUCT, OR     *
+ * PROCESS DISCLOSED, OR REPRESENTS THAT ITS USE WOULD NOT   *
+ * INFRINGE PRIVATELY OWNED RIGHTS.                          *
+ *                                                           *
+ *************************************************************
+ 
+ warning.     3 surfaces were deleted for being the same as others.
+ warning.  surface      1.2 appears more than once in a chain.
+ warning.  surface      1.4 appears more than once in a chain.
+ warning.  surface      1.6 appears more than once in a chain.
+ warning.  surface      2.1 appears more than once in a chain.
+ warning.  surface      2.3 appears more than once in a chain.
+ warning.  surface      2.5 appears more than once in a chain.
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ warning.  plot plane coincident with surface      1
+ plot   is done
+ warning. simple physics turned on for photons > e mev.               
+ nps =         0      e  = 3.0000E+00                     
+ dump    1 on file rved   nps =           0  coll =              0
+                              ctm =      0.00     nrn =              0
+
+ xact   is done
+ dynamic storage =         0 words,          0 bytes.      cp0 =  0.01
+ run terminated when it had used    0 minutes of computer time.
+ warning.  tally  18 tfc bin did not pass  3 of 10 statistical checks.
+ warning.  tally  28 tfc bin did not pass  3 of 10 statistical checks.
+ warning.  tally  38 tfc bin did not pass  3 of 10 statistical checks.
+ warning.     3 of   3 tallies did not pass all 10 statistical checks.
+ warning.     3 of   3 tallies had bins with large relative errors.
+ dump    2 on file rved   nps =         159  coll =         254797
+                              ctm =      1.62     nrn =        1601753
+
+ tally data written to file mcved                                   
+ mcrun  is done
+
+ bad trouble in plot     in routine findel                            
+ source particle no.         0                                        
+ starting random number = 147602372151793                             
+ zero lattice element hit.                                            

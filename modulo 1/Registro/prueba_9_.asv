@@ -1,0 +1,141 @@
+% Leer los archivos DICOM
+%info_CT = dicominfo('CT_image.dcm'); % Información de la imagen CT
+%info_PET = dicominfo('PET_image.dcm'); % Información de la imagen PET
+%PET_slice=PET; 
+
+clc 
+close all 
+
+% Suponiendo que ya tienes los volúmenes PET y CT cargados como PET y CT
+% y las matrices de transformación info_PET y info_CT que contienen
+% ImagePositionPatient y ImageOrientationPatient.
+
+% Definir los límites del espacio físico de las imágenes
+% R_PET = info_PET.PixelSpacing; % PixelSpacing de PET
+% R_CT = info_CT.PixelSpacing;   % PixelSpacing de CT
+% Z_PET = info_PET.SliceThickness; % SliceThickness de PET
+% Z_CT = info_CT.SliceThickness;  % SliceThickness de CT
+vCT=[0.81,0.81,1.5]; 
+
+sCT=size(CT);
+sPET=size(PET);
+
+R_PET=imref3d(size(PET),[ippPET(1) ippPET(1)+vPET(1)*size(PET,1)],[ippPET(2) ippPET(2)+vPET(2)*size(PET,2)],[ippPET(3) ippPET(3)+vPET(3)*size(PET,3)]);
+R_CT=imref3d(size(CT),[ippCT(1) ippCT(1)+vCT(1)*size(CT,1)],[ippCT(2) ippCT(2)+vCT(2)*size(CT,2)],[ippCT(3) ippCT(3)+vCT(3)*size(CT,3)]);
+
+delta=[ippCT(1)-ippPET(1),ippCT(2)-ippPET(2),ippCT(3)-ippPET(3)]; 
+
+
+tranf = affine3d([1 0 0 0; 0 1 0 0; 0 0 1 0; delta(1) delta(2) delta(3) 1]);
+
+R_PET_moved=R_PET; 
+R_CT_moved=R_CT; 
+
+
+%[PET_moved,R_PET1]=imwarp(PET,R_PET,tranf,interp);%,'OutputView',imref3d(size(PET)));
+
+R_PET_moved.XWorldLimits=[405 405+sPET(1)*vPET(1)];
+R_PET_moved.YWorldLimits=[596 596+sPET(2)*vPET(2)]; 
+R_PET_moved.ZWorldLimits=[-640 -640+sPET(3)*vPET(3)]; 
+
+R_CT_moved.XWorldLimits=[212 212+sCT(1)*vCT(1)]; 
+R_CT_moved.YWorldLimits=[397 397+sCT(2)*vCT(2)]; 
+R_CT_moved.ZWorldLimits=[-642 -642+sCT(3)*vCT(3)]; 
+
+
+R2_PET_moved=imref2d(size(PET),R_PET1.XWorldLimits,R_PET_moved.YWorldLimits); 
+R2_CT=imref2d(size(CT),R_CT_moved.XWorldLimits,R_CT_moved.YWorldLimits); 
+
+
+normalized_image = rescale(CT(:,:,60));
+
+
+
+%a=CT(:,:,20); 
+%b=PET(:,:,20); 
+
+dzCT=R_CT_moved.PixelExtentInWorldZ; 
+dzPET=R_PET_moved.PixelExtentInWorldZ; 
+
+nCT=20; 
+zCT=nCT*dzCT/2; %mm  
+
+nPET=zCT/dzPET*2; 
+nPET1=round(nPET); 
+
+
+a=double(CT(:,:,nCT)); 
+b=PET(:,:,nPET1); 
+
+%%
+figure(101)
+ax1 = axes;
+imshow(a ./ max(a(:)), R2_CT, 'Parent', ax1);  
+hold on
+ax2 = axes;
+h = imshow(b, R2_PET_moved, 'Parent', ax2);  % Mostrar PET en su sistema de referencia
+set(ax2, 'Color', 'none');  % Hacer transparente el fondo de ax2
+set(h, 'AlphaData', 0.5);  % Ajustar transparencia de la imagen PET
+colormap(ax2, jet);
+%colorbar(ax2);  % Agregar una barra de color solo para la imagen PET (opcional)
+%linkaxes([ax1, ax2],'xy');
+axis(ax1, 'off');   % Mostrar ejes si quieres visualizar las coordenadas
+max_PET=max(PET(:));
+
+% 
+% %close all 
+% figure(102)
+% for nCT=1:sCT(3)
+% 
+%     cla
+%     zCT=nCT*dzCT/2; %mm  
+%     nPET=zCT/dzPET*2; 
+%     nPET1=round(nPET); 
+%     a=double(CT(:,:,nCT)); 
+%     b=PET(:,:,nPET1);
+% 
+%     ax1 = axes;
+%     imshow(a ./ max(a(:)), R2_CT, 'Parent', ax1);  
+%     hold on
+%     ax2 = axes;     
+%     h = imshow(b, R2_PET_moved, 'Parent', ax2);  % Mostrar PET en su sistema de referencia
+%     set(ax2, 'Color', 'none');  % Hacer transparente el fondo de ax2
+%     set(h, 'AlphaData', 0.5);  % Ajustar transparencia de la imagen PET
+%     colormap(ax2, jet);
+%     %colorbar(ax2);  % Agregar una barra de color solo para la imagen PET (opcional)
+%     %linkaxes([ax1, ax2],'xy');
+%     axis(ax1, 'off');   % Mostrar ejes si quieres visualizar las coordenadas
+%     clim(ax2, [0 max_PET]);
+%     pause(1)
+% end 
+
+%% 
+A=nan(512,512,171); 
+
+A(47:47+199,49:49+199,1:127)=PET; 
+
+ figure(102)
+ for nCT=1:sCT(3)
+ 
+     cla
+     %zCT=nCT*dzCT/2; %mm  
+     %nPET=zCT/dzPET*2; 
+     %nPET1=round(nPET); 
+     %a=double(CT(:,:,nCT)); 
+     %b=PET(:,:,nPET1);
+ 
+     ax1 = axes;
+     imshow(a ./ max(a(:)), 'Parent', ax1);  
+     hold on
+     ax2 = axes;     
+     h = imshow(A(:,:), 'Parent', ax2);  % Mostrar PET en su sistema de referencia
+     set(ax2, 'Color', 'none');  % Hacer transparente el fondo de ax2
+     set(h, 'AlphaData', 0.5);  % Ajustar transparencia de la imagen PET
+     colormap(ax2, jet);
+     %colorbar(ax2);  % Agregar una barra de color solo para la imagen PET (opcional)
+     %linkaxes([ax1, ax2],'xy');
+     axis(ax1, 'off');   % Mostrar ejes si quieres visualizar las coordenadas
+     clim(ax2, [0 max_PET]);
+     pause(1)
+ end 
+
