@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SlicerDosimMod3</class>
+ <widget class="qMRMLWidget" name="SlicerDosimMod3">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>480</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QGroupBox" name="groupDosis">
+     <property name="title">
+      <string>Modulo 3: Calculo de dosis</string>
+     </property>
+     <layout class="QVBoxLayout" name="dosisLayout">
+      <item>
+       <widget class="QPushButton" name="btnCargarMCTAL">
+        <property name="text">
+         <string>Cargar MCTAL (output MCNP)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnCalcularDosis">
+        <property name="text">
+         <string>Calcular dosis 3D</string>
+        </property>
+        <property name="styleSheet">
+         <string>font-weight: bold; background-color: #e67e22; color: white;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnCalcularMIRD">
+        <property name="text">
+         <string>Calcular MIRD (analitico)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnVisualizarDosis">
+        <property name="text">
+         <string>Visualizar mapa de dosis</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupAnalisis">
+     <property name="title">
+      <string>DVH / TCP / NTCP</string>
+     </property>
+     <layout class="QVBoxLayout" name="analisisLayout">
+      <item>
+       <widget class="QPushButton" name="btnCalcularDVH">
+        <property name="text">
+         <string>Calcular DVH</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnCalcularTCP">
+        <property name="text">
+         <string>Calcular TCP</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnCalcularNTCP">
+        <property name="text">
+         <string>Calcular NTCP</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnMicroDosimetria">
+        <property name="text">
+         <string>Micro-dosimetria</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupReporte">
+     <property name="title">
+      <string>Reporte</string>
+     </property>
+     <layout class="QVBoxLayout" name="reportLayout">
+      <item>
+       <widget class="QTextEdit" name="txtReporte">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Resultados del analisis...</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnExportarReporte">
+        <property name="text">
+         <string>Exportar reporte PDF</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

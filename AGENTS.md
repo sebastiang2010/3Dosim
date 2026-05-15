@@ -36,18 +36,29 @@ Resources/Config/
 └── tissue_config.json          # [NUEVO] Config unica de tejidos/materiales
 ```
 
+## Modulos de Slicer (entradas separadas en dropdown 3Dosim)
+
+| Categoria | Modulo | Funcion |
+|---|---|---|
+| 3Dosim | SlicerDosim | Modulo 1: Carga, segmentacion, registro |
+| 3Dosim | SlicerDosimMod2 | Modulo 2: Generacion MCNP |
+| 3Dosim | SlicerDosimMod3 | Modulo 3: Analisis dosimetrico |
+
+Todos los modulos comparten SlicerDosimLib (en SlicerDosim/).
+
 ## Estado actual de trabajo
 Refactor completa del SlicerDosim para Slicer:
 - Creado `tissue_config.json` con tejidos, colores, HU ranges y composiciones MCNP
 - Creado `config.py` (TissueConfig singleton) que centraliza toda la config
-- Modulo 2 (MCNP) dividido en 4 archivos compartimentados: materials, geometry, source, tallies
+- Modulo 2 (MCNP) dividido en 4 sub-modulos compartimentados: materials, geometry, source, tallies
+- Modulos separados en dropdown: SlicerDosim (mod1), SlicerDosimMod2 (mod2), SlicerDosimMod3 (mod3)
 - `phantom_segmentation.py` ahora usa TissueConfig en vez de dicts hardcodeados
 - `dosimetry.py` ahora usa `mctal_parser.py` real en vez de placeholder
-- `__init__.py` y `CMakeLists.txt` actualizados con todos los nuevos archivos
+- `__init__.py` y `CMakeLists.txt` actualizados
 
 Pendiente:
-- Verificar que el modulo aparezca en Slicer (categoria "3Dosim" ya configurada)
-- Probar el pipeline completo
+- Agregar ruta en Slicer: Edit > Settings > Modules > Additional paths > `...\Modules\Scripted`
+- Probar que los 3 modulos aparezcan bajo "3Dosim"
 
 ## Comandos utiles
 - `/remember [tag] mensaje` - Guardar progreso en memoria persistente

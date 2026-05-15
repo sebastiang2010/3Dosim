@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SlicerDosimMod2</class>
+ <widget class="qMRMLWidget" name="SlicerDosimMod2">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>480</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QGroupBox" name="groupMCNP">
+     <property name="title">
+      <string>Modulo 2: Generacion MCNP</string>
+     </property>
+     <layout class="QVBoxLayout" name="mcnpLayout">
+      <item>
+       <widget class="QLabel" name="lblInfo">
+        <property name="text">
+         <string>Configuracion de simulacion Monte Carlo voxelizada.
+Requiere phantom segmentado desde SlicerDosim (Modulo 1).</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFormLayout" name="formMCNP">
+        <item row="0" column="0">
+         <widget class="QLabel" name="lblParticulas">
+          <property name="text">
+           <string>Particulas:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QSpinBox" name="spinNumParticulas">
+          <property name="minimum">
+           <number>10000</number>
+          </property>
+          <property name="maximum">
+           <number>1000000000</number>
+          </property>
+          <property name="value">
+           <number>10000000</number>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="lblVoxel">
+          <property name="text">
+           <string>Voxel (mm):</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QDoubleSpinBox" name="spinTamVoxel">
+          <property name="value">
+           <double>3.0</double>
+          </property>
+          <property name="singleStep">
+           <double>0.5</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="lblIsotopo">
+          <property name="text">
+           <string>Isotopo:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QComboBox" name="comboIsotopo">
+          <item>
+           <property name="text">
+            <string>Y-90</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>I-131</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Lu-177</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Tc-99m</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="lblRefinar">
+          <property name="text">
+           <string>Refinar por HU:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QCheckBox" name="chkRefinarHU">
+          <property name="text">
+           <string>Usar HU del CT para densidad</string>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnGenerarMCNP">
+        <property name="text">
+         <string>Generar input MCNP</string>
+        </property>
+        <property name="styleSheet">
+         <string>font-weight: bold; background-color: #4a90d9; color: white;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnEjecutarMCNP">
+        <property name="text">
+         <string>Ejecutar MCNP (si instalado)</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupMCTAL">
+     <property name="title">
+      <string>Resultados MCNP</string>
+     </property>
+     <layout class="QVBoxLayout" name="mctalLayout">
+      <item>
+       <widget class="QPushButton" name="btnCargarMCTAL">
+        <property name="text">
+         <string>Cargar MCTAL (output MCNP)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QTextEdit" name="txtInfo">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Info de generacion...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
