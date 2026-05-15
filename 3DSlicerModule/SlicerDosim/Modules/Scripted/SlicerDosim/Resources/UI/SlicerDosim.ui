@@ -1,0 +1,556 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SlicerDosim</class>
+ <widget class="qMRMLWidget" name="SlicerDosim">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>480</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+
+     <!-- TAB 1: CARGA Y SEGMENTACION -->
+     <widget class="QWidget" name="tabCarga">
+      <attribute name="title">
+       <string>1. Carga y Segmentacion</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabCargaLayout">
+       <item>
+        <widget class="QGroupBox" name="groupDicom">
+         <property name="title">
+          <string>Datos de entrada</string>
+         </property>
+         <layout class="QVBoxLayout" name="dicomLayout">
+          <item>
+           <widget class="QPushButton" name="btnCargarDicom">
+            <property name="text">
+             <string>Cargar DICOM (CT + PET/SPECT)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCargarNifti">
+            <property name="text">
+             <string>Cargar NIfTI</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleButton" name="colVolumenes">
+            <property name="text">
+             <string>Volumenes cargados</string>
+            </property>
+            <layout class="QVBoxLayout" name="volLayout">
+             <item>
+              <widget class="QTableWidget" name="tablaVolumenes"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupSegmentacion">
+         <property name="title">
+          <string>Segmentacion - Phantom completo</string>
+         </property>
+         <layout class="QVBoxLayout" name="segLayout">
+          <item>
+           <widget class="QComboBox" name="comboMetodoSeg">
+            <item>
+             <property name="text">
+              <string>Segment Editor manual</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>TotalSegmentator (IA) solo higado</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>U-Net (MONAI) preentrenado</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Threshold + Region Growing</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <!-- Pipeline completo IA -->
+          <item>
+           <widget class="QPushButton" name="btnPipelineCompleto">
+            <property name="text">
+             <string>Pipeline completo IA (TotalSegmentator + Tumor)</string>
+            </property>
+            <property name="styleSheet">
+             <string>font-weight: bold; background-color: #4a90d9; color: white;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QFrame" name="frameTumor">
+            <property name="frameShape">
+             <enum>QFrame::StyledPanel</enum>
+            </property>
+            <layout class="QHBoxLayout" name="tumorLayout">
+             <item>
+              <widget class="QLabel" name="lblSUV">
+               <property name="text">
+                <string>SUV &gt;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="spinSUVThreshold">
+               <property name="value">
+                <double>2.5</double>
+               </property>
+               <property name="singleStep">
+                <double>0.5</double>
+               </property>
+               <property name="maximum">
+                <double>20.0</double>
+               </property>
+               <property name="prefix">
+                <string/>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnSegmentarTumor">
+               <property name="text">
+                <string>Segmentar tumor (SUV)</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <!-- NIfTI externo -->
+          <item>
+           <widget class="QFrame" name="frameNifti">
+            <layout class="QHBoxLayout" name="niftiLayout">
+             <item>
+              <widget class="QPushButton" name="btnCargarNiftiHigado">
+               <property name="text">
+                <string>Cargar NIfTI higado</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnCargarNiftiTumor">
+               <property name="text">
+                <string>Cargar NIfTI tumor</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleButton" name="colResultadosSeg">
+            <property name="text">
+             <string>Resultados</string>
+            </property>
+            <layout class="QVBoxLayout" name="resSegLayout">
+             <item>
+              <widget class="QLabel" name="lblEstadoPipeline">
+               <property name="text">
+                <string>Pipeline: 0/9 pasos</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblVolHigado">
+               <property name="text">
+                <string>Volumen higado: -- ml</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblVolTumor">
+               <property name="text">
+                <string>Volumen tumor: -- ml</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </layout>
+      </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnSegmentarHigado">
+            <property name="text">
+             <string>Segmentar higado</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnSegmentarTumor">
+            <property name="text">
+             <string>Segmentar tumor / lesiones</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleButton" name="colResultadosSeg">
+            <property name="text">
+             <string>Resultados</string>
+            </property>
+            <layout class="QVBoxLayout" name="resSegLayout">
+             <item>
+              <widget class="QLabel" name="lblVolHigado">
+               <property name="text">
+                <string>Volumen higado: -- ml</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblVolTumor">
+               <property name="text">
+                <string>Volumen tumor: -- ml</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+
+     <!-- TAB 2: REGISTRO -->
+     <widget class="QWidget" name="tabRegistro">
+      <attribute name="title">
+       <string>2. Registro</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabRegistroLayout">
+       <item>
+        <widget class="QGroupBox" name="groupRegistro">
+         <property name="title">
+          <string>Registro CT - PET/SPECT</string>
+         </property>
+         <layout class="QVBoxLayout" name="regLayout">
+          <item>
+           <widget class="QComboBox" name="comboMetodoReg">
+            <item>
+             <property name="text">
+              <string>BrainsFit (rigido + afin)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Elastix (BSpline no rigido)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnEjecutarRegistro">
+            <property name="text">
+             <string>Ejecutar registro</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkCollapsibleButton" name="colResultadosReg">
+            <property name="text">
+             <string>Resultados</string>
+            </property>
+            <layout class="QVBoxLayout" name="resRegLayout">
+             <item>
+              <widget class="QLabel" name="lblEstadoReg"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+
+     <!-- TAB 3: MCNP -->
+     <widget class="QWidget" name="tabMCNP">
+      <attribute name="title">
+       <string>3. MCNP</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabMCNPLayout">
+       <item>
+        <widget class="QGroupBox" name="groupMCNP">
+         <property name="title">
+          <string>Generacion entrada MCNP</string>
+         </property>
+         <layout class="QVBoxLayout" name="mcnpLayout">
+          <item>
+           <widget class="QLabel" name="lblMCNPInfo">
+            <property name="text">
+             <string>Configuracion de la simulacion Monte Carlo</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QFormLayout" name="formMCNP">
+            <item row="0" column="0">
+             <widget class="QLabel" name="lblNumParticulas">
+              <property name="text">
+               <string>Numero de particulas:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QSpinBox" name="spinNumParticulas">
+              <property name="minimum">
+               <number>10000</number>
+              </property>
+              <property name="maximum">
+               <number>1000000000</number>
+              </property>
+              <property name="value">
+               <number>10000000</number>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="lblTamañoVoxel">
+              <property name="text">
+               <string>Tamano voxel (mm):</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QDoubleSpinBox" name="spinTamVoxel">
+              <property name="value">
+               <double>3.0</double>
+              </property>
+              <property name="singleStep">
+               <double>0.5</double>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="lblFuente">
+              <property name="text">
+               <string>Isotopo:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QComboBox" name="comboIsotopo">
+              <item>
+               <property name="text">
+                <string>Y-90</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>I-131</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Lu-177</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Tc-99m</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnGenerarMCNP">
+            <property name="text">
+             <string>Generar input MCNP</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnEjecutarMCNP">
+            <property name="text">
+             <string>Ejecutar MCNP (si instalado)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+
+     <!-- TAB 4: DOSIMETRIA -->
+     <widget class="QWidget" name="tabDosimetria">
+      <attribute name="title">
+       <string>4. Dosimetria</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabDosimetriaLayout">
+       <item>
+        <widget class="QGroupBox" name="groupDosis">
+         <property name="title">
+          <string>Calculo de dosis</string>
+         </property>
+         <layout class="QVBoxLayout" name="dosisLayout">
+          <item>
+           <widget class="QPushButton" name="btnCargarMCTAL">
+            <property name="text">
+             <string>Cargar MCTAL (output MCNP)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCalcularDosis">
+            <property name="text">
+             <string>Calcular dosis 3D</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCalcularMIRD">
+            <property name="text">
+             <string>Calcular MIRD</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupVisualizacion">
+         <property name="title">
+          <string>Visualizacion dosis</string>
+         </property>
+         <layout class="QVBoxLayout" name="visLayout">
+          <item>
+           <widget class="QPushButton" name="btnVisualizarDosis">
+            <property name="text">
+             <string>Visualizar mapa de dosis</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="ctkRangeWidget" name="rangeDosis">
+            <property name="singleStep">
+             <double>1.0</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+
+     <!-- TAB 5: ANALISIS -->
+     <widget class="QWidget" name="tabAnalisis">
+      <attribute name="title">
+       <string>5. Analisis</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabAnalisisLayout">
+       <item>
+        <widget class="QGroupBox" name="groupDVH">
+         <property name="title">
+          <string>DVH / TCP / NTCP</string>
+         </property>
+         <layout class="QVBoxLayout" name="dvhLayout">
+          <item>
+           <widget class="QPushButton" name="btnCalcularDVH">
+            <property name="text">
+             <string>Calcular DVH (histograma dosis-volumen)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCalcularTCP">
+            <property name="text">
+             <string>Calcular TCP (probabilidad control tumoral)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCalcularNTCP">
+            <property name="text">
+             <string>Calcular NTCP (probabilidad complicacion)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnMicroDosimetria">
+            <property name="text">
+             <string>Dosimetria de microestructuras</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupReporte">
+         <property name="title">
+          <string>Reporte</string>
+         </property>
+         <layout class="QVBoxLayout" name="reportLayout">
+          <item>
+           <widget class="QTextEdit" name="txtReporte">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnExportarReporte">
+            <property name="text">
+             <string>Exportar reporte PDF / CSV</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkRangeWidget</class>
+   <extends>QWidget</extends>
+   <header>ctkRangeWidget.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
