@@ -47,7 +47,8 @@ Resources/Config/
 Todos los modulos comparten SlicerDosimLib (en SlicerDosim/).
 
 ## Estado actual de trabajo
-Refactor completa del SlicerDosim para Slicer:
+
+### Refactor SlicerDosim (COMPLETADO)
 - Creado `tissue_config.json` con tejidos, colores, HU ranges y composiciones MCNP
 - Creado `config.py` (TissueConfig singleton) que centraliza toda la config
 - Modulo 2 (MCNP) dividido en 4 sub-modulos compartimentados: materials, geometry, source, tallies
@@ -56,9 +57,36 @@ Refactor completa del SlicerDosim para Slicer:
 - `dosimetry.py` ahora usa `mctal_parser.py` real en vez de placeholder
 - `__init__.py` y `CMakeLists.txt` actualizados
 
-Pendiente:
+### Pipeline Orchestrator + Features (COMPLETADO - May 2026)
+`test_pipeline_orchestrator.py` mejorado con:
+
+| Feature | Descripcion |
+|---|---|
+| ✅ **CheckpointManager** | Guarda estado en JSON tras cada paso. Si se corta, al reiniciar retoma desde el ultimo checkpoint. `--reset` para empezar fresco. |
+| ✅ **Anonimizacion** | Al cargar DICOM, copia a directorio temporal y limpia tags (PatientName, PatientID, etc) con pydicom. Los nodos en Slicer se renombran. |
+| ✅ **Sacar camilla + aire** | Threshold HU>-200 + cierre morfologico + componente conectada mas grande + eliminacion de camilla por corte axial. Aplica mascara al CT. |
+| ✅ **Barra de progreso** | QProgressDialog durante TotalSegmentator con pasos y mensaje de "esta funcionando". Tambien muestra progreso en status bar de Slicer. |
+| ✅ **Validacion medica** | Dialogo modal Qt con botones SI/NO. No continua sin aprobacion medica explicita. Mensaje claro de lo que se va a generar. |
+| ✅ **Git commit prompt** | Al finalizar OK, pregunta si hacer commit. Busca el repo git, hace `git add -A` y `git commit -m "mensaje"`. |
+| ✅ **Reporte mejorado** | Muestra tiempos, checkpoints reutilizados, errores, directorios de salida. Retorna bool para control de flujo. |
+
+### Flujo actual del pipeline
+```
+1. check_slicer       → Verifica Slicer + paths de modulos
+2. load_dicom         → Carga CT+PET con DB temporal
+3. anonymize          → Anonimiza tags DICOM + renombra nodos
+4. remove_couch_air   → Elimina camilla y aire del CT
+5. segment_phantom    → TotalSegmentator con QProgressDialog
+6. validate_segmentation → ⛔ MEDICO DEBE APROBAR
+7. export_nifti       → Exporta a NIfTI
+8. generate_mcnp      → Genera entrada MCNP + verifica .i
+9. report + commit    → Reporte final + opcion de commit git
+```
+
+### Pendiente
 - Agregar ruta en Slicer: Edit > Settings > Modules > Additional paths > `...\Modules\Scripted`
 - Probar que los 3 modulos aparezcan bajo "3Dosim"
+- Ejecutar `test_pipeline_orchestrator.py` dentro de Slicer con datos reales
 
 ## Comandos utiles
 - `/remember [tag] mensaje` - Guardar progreso en memoria persistente

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from typing import Optional
 
 import qt
@@ -19,6 +20,10 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleLogic,
     ScriptedLoadableModuleTest,
 )
+
+_scripted_dir = os.path.join(os.path.dirname(__file__), "..")
+if _scripted_dir not in sys.path:
+    sys.path.insert(0, _scripted_dir)
 
 from SlicerDosim.SlicerDosimLib import (
     MCNPInputGenerator,
