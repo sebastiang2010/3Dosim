@@ -23,15 +23,14 @@ TAGS_TO_CLEAR = [
     "StudyID", "OtherPatientIDs",
 ]
 
+# Import absoluto de utils
+from PipelineOrchestrator.utils import show_progress
+
 
 def anonymize_dicom_nodes(ct_node, pet_node=None):
     """
     Anonimiza los nodos CT y PET ya cargados en Slicer.
     Les cambia el nombre a '3Dosim_CT_anon' / '3Dosim_PET_anon'.
-
-    Args:
-        ct_node: Nodo VTK del volumen CT
-        pet_node: Nodo VTK del volumen PET (opcional)
     """
     import slicer
 
@@ -42,43 +41,32 @@ def anonymize_dicom_nodes(ct_node, pet_node=None):
             continue
         old_name = node.GetName()
         node.SetName(f"3Dosim_{label}_anon")
-        logger.info(f"  ✓ {label}: '{old_name}' -> '{node.GetName()}'")
+        logger.info(f"  {label}: '{old_name}' -> '{node.GetName()}'")
 
-    logger.info("  ✓ Nodos renombrados")
+    logger.info("  Nodos renombrados")
 
 
 def anonymize_dicom_files_pydicom(ct_dir: str, pet_dir: str, anon_dir: str) -> bool:
     """
-    Copia archivos DICOM a directorio temporal y limpia tags
-    con pydicom (PatientName, PatientID, etc).
-
-    Args:
-        ct_dir: Directorio con DICOM de CT
-        pet_dir: Directorio con DICOM de PET
-        anon_dir: Directorio temporal donde guardar copias anonimizadas
-
-    Returns:
-        True si se completo exitosamente, False si pydicom no esta disponible
+    Copia archivos DICOM a directorio temporal y limpia tags con pydicom.
     """
     try:
         import pydicom
     except ImportError:
-        logger.warning("  ⚠ pydicom no disponible, usando anonimizacion basica")
+        logger.warning("  pydicom no disponible, usando anonimizacion basica")
         return False
 
-    # Limpiar directorio anon si existe
     if os.path.exists(anon_dir):
         shutil.rmtree(anon_dir)
 
     for src_dir, label in [(ct_dir, "CT"), (pet_dir, "PET")]:
         if not os.path.isdir(src_dir):
-            logger.warning(f"  ⚠ Directorio {label} no encontrado, saltando")
+            logger.warning(f"  Directorio {label} no encontrado, saltando")
             continue
 
         dst_dir = os.path.join(anon_dir, label)
         os.makedirs(dst_dir, exist_ok=True)
 
-        # Listar archivos DICOM (con o sin extension .dcm)
         dcm_files = [
             f for f in os.listdir(src_dir)
             if f.endswith('.dcm') or f.isdigit() or not os.path.splitext(f)[1]
@@ -97,47 +85,31 @@ def anonymize_dicom_files_pydicom(ct_dir: str, pet_dir: str, anon_dir: str) -> b
                 for tag in TAGS_TO_CLEAR:
                     if tag in ds:
                         ds[tag].value = ""
-                # Generar nuevo UID para la serie
                 if "SeriesInstanceUID" in ds:
                     ds.SeriesInstanceUID = pydicom.uid.generate_uid()
                 ds.save_as(dst_path)
             except Exception as e:
-                logger.warning(f"  ⚠ Error anonimizando {fname}: {e}")
+                logger.warning(f"  Error anonimizando {fname}: {e}")
                 continue
 
-            # Mostrar progreso cada 20 archivos
             if (i + 1) % 20 == 0:
                 logger.info(f"    {i+1}/{len(dcm_files)}")
 
-    logger.info(f"  ✓ Archivos anonimizados en: {anon_dir}")
+    logger.info(f"  Archivos anonimizados en: {anon_dir}")
     return True
 
 
 def anonymize(ct_node, ct_dir: str, pet_dir: str, anon_dir: str, pet_node=None):
     """
-    Pipeline completo de anonimizacion:
-    1. Renombra nodos en Slicer
-    2. Limpia tags DICOM via pydicom (si disponible)
-
-    Args:
-        ct_node: Nodo CT en Slicer
-        ct_dir: Directorio DICOM CT original
-        pet_dir: Directorio DICOM PET original
-        anon_dir: Directorio para copias anonimizadas
-        pet_node: Nodo PET en Slicer (opcional)
+    Pipeline completo de anonimizacion.
     """
-    from .utils import show_progress
-
     show_progress("Anonimizando imagenes...")
 
-    # 1. Renombrar nodos
     anonymize_dicom_nodes(ct_node, pet_node)
 
-    # 2. Limpiar tags DICOM
     ok = anonymize_dicom_files_pydicom(ct_dir, pet_dir, anon_dir)
     if not ok:
         logger.info("  Anonimizacion basica de nodos aplicada")
-        logger.info("  -> Tags DICOM originales preservados en disco")
-        logger.info("  -> Para anonimizacion completa: instalar pydicom en Slicer")
+        logger.info("  Para anonimizacion completa: instalar pydicom en Slicer")
 
-    logger.info("  ✓ Anonimizacion completada")
+    logger.info("  Anonimizacion completada")

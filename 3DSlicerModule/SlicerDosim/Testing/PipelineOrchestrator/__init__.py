@@ -12,7 +12,7 @@ Estructura modular que luego se promocionara a SlicerDosimLib/orchestrator/:
   git_commit.py     - Prompt de commit git al finalizar
   pipeline.py       - PipelineTestOrchestrator: orquesta todos los pasos
   main.py           - Entry point con argparse
-"""
 
-from .checkpoint import CheckpointManager
-from .pipeline import PipelineTestOrchestrator
+Todos los imports internos son ABSOLUTOS (from PipelineOrchestrator.xxx)
+para compatibilidad con 3D Slicer --python-script.
+"""

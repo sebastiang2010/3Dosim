@@ -83,10 +83,59 @@ Todos los modulos comparten SlicerDosimLib (en SlicerDosim/).
 9. report + commit    → Reporte final + opcion de commit git
 ```
 
+### PipelineOrchestrator - Estructura modular (NUEVA)
+El pipeline de test ahora vive en su propia carpeta con arquitectura promocionable:
+
+```
+Testing/PipelineOrchestrator/
+├── __init__.py              # Exporta API publica
+├── main.py                  # Entry point CLI (argparse + --reset)
+├── pipeline.py              # PipelineTestOrchestrator (orquestador)
+├── checkpoint.py            # CheckpointManager (estado JSON persistente)
+├── anonymize.py             # Anonimizacion DICOM con pydicom
+├── couch_remover.py         # Eliminacion camilla + aire (threshold + morfologia)
+├── segmentation.py          # TotalSegmentator + barra progreso + phantom sintetico
+├── validation.py            # Dialogo Qt de validacion medica obligatoria
+├── mcnp_builder.py          # Generacion + verificacion entrada MCNP
+├── git_commit.py            # Prompt de commit git al finalizar
+└── utils.py                 # Logger, paths, show_progress()
+```
+
+`test_pipeline_orchestrator.py` ahora es un wrapper delgado que importa y ejecuta `PipelineOrchestrator.main.main()`.
+
+### Proximo paso promocion
+Cuando el orquestador este maduro, mover la carpeta completa a:
+```
+SlicerDosimLib/orchestrator/    ← parte oficial de la herramienta
+```
+Y los modulos de Slicer (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) lo importaran desde ahi.
+
 ### Pendiente
 - Agregar ruta en Slicer: Edit > Settings > Modules > Additional paths > `...\Modules\Scripted`
 - Probar que los 3 modulos aparezcan bajo "3Dosim"
 - Ejecutar `test_pipeline_orchestrator.py` dentro de Slicer con datos reales
+
+## Datos de ejecucion (guardados para no repetir)
+
+| Item | Valor |
+|---|---|
+| **Slicer.exe** | `C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe` |
+| **Paciente 2** | `C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2` |
+| **Pipeline entry** | `3DSlicerModule/SlicerDosim/Testing/PipelineOrchestrator/main.py` |
+| **Entry legacy** | `3DSlicerModule/SlicerDosim/Testing/Python/test_pipeline_orchestrator.py` |
+| **Directorio raiz** | `C:\programas\3Dosim\3Dosim_v_3.14` |
+| **Repo git** | En el directorio raiz |
+| **Modulos Slicer** | `Modules/Scripted/` (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) |
+
+### Comando para ejecutar el pipeline
+```bash
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2"
+```
+
+### Para reiniciar checkpoints
+```bash
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --reset
+```
 
 ## Comandos utiles
 - `/remember [tag] mensaje` - Guardar progreso en memoria persistente

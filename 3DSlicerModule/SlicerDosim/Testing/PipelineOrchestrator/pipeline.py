@@ -1,30 +1,20 @@
 """
 PipelineTestOrchestrator - Orquesta el pipeline completo 3Dosim en Slicer.
-
-Pasos:
-  1. Verificar entorno Slicer
-  2. Cargar DICOM (CT + PET)
-  3. Anonimizar
-  4. Eliminar camilla y aire del CT
-  5. Segmentar con TotalSegmentator (+ barra de progreso)
-  6. Validacion medica obligatoria
-  7. Exportar NIfTI
-  8. Generar entrada MCNP
-  9. Reporte final + commit git
+Todos los imports son absolutos para compatibilidad con Slicer --python-script.
 """
 
 import logging
 import os
 import time
 
-from .checkpoint import CheckpointManager
-from . import anonymize
-from . import couch_remover
-from . import segmentation
-from . import validation
-from . import mcnp_builder
-from . import git_commit
-from .utils import logger, add_module_path, show_progress
+from PipelineOrchestrator.checkpoint import CheckpointManager
+from PipelineOrchestrator import anonymize
+from PipelineOrchestrator import couch_remover
+from PipelineOrchestrator import segmentation
+from PipelineOrchestrator import validation
+from PipelineOrchestrator import mcnp_builder
+from PipelineOrchestrator import git_commit
+from PipelineOrchestrator.utils import logger, add_module_path, show_progress
 
 logger = logging.getLogger("3DosimTest")
 
@@ -35,7 +25,6 @@ class PipelineTestOrchestrator:
     Todos los pasos tienen checkpoint: si se corta, retoma desde donde quedo.
     """
 
-    # Nombres internos de cada paso (para checkpoints)
     STEP_CHECK_SLICER  = "check_slicer"
     STEP_LOAD_DICOM    = "load_dicom"
     STEP_ANONYMIZE     = "anonymize"
@@ -53,18 +42,12 @@ class PipelineTestOrchestrator:
         self.checkpoint_dir = os.path.join(self.output_dir, ".checkpoints")
         self.anon_dir = os.path.join(self.output_dir, ".anon")
 
-        self.results = {
-            "pasos": [],
-            "errores": [],
-            "tiempos": {},
-        }
+        self.results = {"pasos": [], "errores": [], "tiempos": {}}
 
-        # Checkpoint manager
         self.checkpoint = CheckpointManager(self.checkpoint_dir)
         if reset:
             self.checkpoint.reset()
 
-        # Nodos Slicer (se llenan durante el pipeline)
         self.ct_node = None
         self.pet_node = None
         self.segmentation_node = None
@@ -85,48 +68,36 @@ class PipelineTestOrchestrator:
     # ==================================================================
 
     def run(self):
-        """Ejecuta el pipeline completo con checkpoints."""
         logger.info("")
         logger.info("INICIANDO PIPELINE")
         logger.info("")
 
-        # Paso 1: Verificar Slicer + paths
         if self._checkpoint_step(self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
                                  self._check_slicer):
             add_module_path()
 
-        # Paso 2: Cargar DICOM
         self._checkpoint_step(self.STEP_LOAD_DICOM, "Cargando imagenes DICOM",
                               self._load_dicom)
 
-        # Paso 3: Anonimizar
         self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
                               self._anonymize)
 
-        # Paso 4: Quitar camilla y aire
         self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
                               self._remove_couch_air)
 
-        # Paso 5: Segmentar con TotalSegmentator (+ progreso)
         self._checkpoint_step(self.STEP_SEGMENT, "Segmentando (TotalSegmentator)",
                               self._segment)
 
-        # Paso 6: Validacion medica obligatoria
         self._checkpoint_step(self.STEP_VALIDATE, "Validacion medica de la segmentacion",
                               self._do_validation)
 
-        # Paso 7: Exportar NIfTI
         self._checkpoint_step(self.STEP_EXPORT_NIFTI, "Exportando phantom a NIfTI",
                               self._export_nifti)
 
-        # Paso 8: Generar entrada MCNP
         self._checkpoint_step(self.STEP_GENERATE_MCNP, "Generando entrada MCNP (Modulo 2)",
                               self._generate_mcnp)
 
-        # Reporte final
         ok = self._report()
-
-        # Si todo OK -> preguntar por commit
         if ok:
             git_commit.prompt_git_commit(self.data_dir)
 
@@ -134,12 +105,7 @@ class PipelineTestOrchestrator:
     # CHECKPOINT STEP
     # ==================================================================
 
-    def _checkpoint_step(self, step_name: str, display_name: str, func):
-        """
-        Ejecuta un paso solo si no esta en checkpoint.
-        Si ya fue completado, lo salta.
-        """
-        # Verificar checkpoint
+    def _checkpoint_step(self, step_name, display_name, func):
         if self.checkpoint.is_completed(step_name):
             logger.info(f"  [{'...'}]: ya completado (checkpoint salta)")
             self.results["pasos"].append({
@@ -162,7 +128,6 @@ class PipelineTestOrchestrator:
             self.checkpoint.mark_completed(step_name)
             show_progress(f"{display_name} completado")
             return True
-
         except Exception as e:
             elapsed = time.time() - t0
             logger.error(f"  FALLO: {e}")
@@ -174,11 +139,10 @@ class PipelineTestOrchestrator:
             return False
 
     # ==================================================================
-    # PASOS DEL PIPELINE
+    # PASOS
     # ==================================================================
 
     def _check_slicer(self):
-        """Verifica que estamos dentro de 3D Slicer."""
         try:
             import slicer
             logger.info(f"  Slicer version: {slicer.app.majorVersion}.{slicer.app.minorVersion}")
@@ -186,7 +150,6 @@ class PipelineTestOrchestrator:
             raise RuntimeError("No se detecta 3D Slicer. Ejecutar dentro de Slicer.")
 
     def _load_dicom(self):
-        """Carga DICOM usando DICOMUtils con DB temporal."""
         import slicer
         from DICOMLib import DICOMUtils
 
@@ -199,7 +162,6 @@ class PipelineTestOrchestrator:
         logger.info(f"  Archivos CT: {len(ct_files)}")
         logger.info(f"  Archivos PET: {len(pet_files)}")
 
-        # DB temporal
         original_db_dir = DICOMUtils.openTemporaryDatabase()
         logger.info("  DB temporal abierta")
 
@@ -209,7 +171,6 @@ class PipelineTestOrchestrator:
                 ok = DICOMUtils.importDicom(dir_path)
                 if not ok:
                     raise RuntimeError(f"Fallo indexacion {label}")
-                logger.info(f"  {label} indexado")
 
             series_uids = DICOMUtils.allSeriesUIDsInDatabase()
             logger.info(f"  Series en DB: {len(series_uids)}")
@@ -223,9 +184,7 @@ class PipelineTestOrchestrator:
             raise RuntimeError(f"Error cargando DICOM: {e}")
 
         DICOMUtils.closeTemporaryDatabase(original_db_dir, cleanup=True)
-        logger.info("  DB original restaurada")
 
-        # Identificar CT y PET
         loaded_ct, loaded_pet = False, False
         for node_id in loaded_node_ids:
             node = slicer.mrmlScene.GetNodeByID(node_id)
@@ -240,7 +199,6 @@ class PipelineTestOrchestrator:
                 self.pet_node = node
                 loaded_pet = True
 
-        # Fallback por orden
         if not loaded_ct:
             for node_id in loaded_node_ids:
                 node = slicer.mrmlScene.GetNodeByID(node_id)
@@ -268,35 +226,24 @@ class PipelineTestOrchestrator:
         logger.info(f"  CT espaciado: {spacing[0]:.3f}x{spacing[1]:.3f}x{spacing[2]:.3f} mm")
 
     def _anonymize(self):
-        """Paso de anonimizacion."""
-        anonymize.anonymize(
-            self.ct_node, self.ct_dir, self.pet_dir,
-            self.anon_dir, self.pet_node
-        )
+        anonymize.anonymize(self.ct_node, self.ct_dir, self.pet_dir, self.anon_dir, self.pet_node)
 
     def _remove_couch_air(self):
-        """Paso de eliminacion de camilla y aire."""
         couch_remover.remove_couch_and_air(self.ct_node)
 
     def _segment(self):
-        """Paso de segmentacion."""
         seg_node = segmentation.run_segmentation(self.ct_node, self.output_dir)
         self.segmentation_node = seg_node
 
     def _do_validation(self):
-        """Paso de validacion medica."""
         validation.validate_segmentation()
 
     def _export_nifti(self):
-        """Exporta phantom a NIfTI."""
         logger.info("  Export NIfTI: saltado (no necesario para Mod 2)")
         self.phantom_nifti_path = None
 
     def _generate_mcnp(self):
-        """Paso de generacion de entrada MCNP."""
-        mcnp_path = mcnp_builder.generate_mcnp_input(
-            self.ct_node, self.output_dir, self.data_dir
-        )
+        mcnp_path = mcnp_builder.generate_mcnp_input(self.ct_node, self.output_dir, self.data_dir)
         self.mcnp_path = mcnp_path
 
     # ==================================================================
@@ -304,7 +251,6 @@ class PipelineTestOrchestrator:
     # ==================================================================
 
     def _report(self) -> bool:
-        """Genera reporte final. Returns: True si todos los pasos fueron exitosos."""
         logger.info("")
         logger.info("=" * 70)
         logger.info(" REPORTE FINAL DEL PIPELINE 3Dosim")
@@ -352,5 +298,4 @@ class PipelineTestOrchestrator:
         else:
             logger.info(f" RESULTADO: {fails}/{total} PASOS FALLARON")
         logger.info("=" * 70)
-
         return all_ok

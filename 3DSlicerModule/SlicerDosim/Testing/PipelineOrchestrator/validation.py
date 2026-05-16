@@ -9,13 +9,12 @@ import logging
 
 logger = logging.getLogger("3DosimTest")
 
+from PipelineOrchestrator.utils import show_progress
+
 
 def validate_segmentation():
     """
     VALIDACION MEDICA OBLIGATORIA.
-
-    La segmentacion debe ser revisada y aprobada por un medico
-    antes de continuar con la generacion de entrada MCNP.
 
     Muestra un dialogo modal con botones SI/NO.
     NO se puede continuar sin aprobacion medica explicita.
@@ -23,8 +22,6 @@ def validate_segmentation():
     Raises:
         RuntimeError: Si el medico rechaza la segmentacion
     """
-    from .utils import show_progress
-
     logger.info("")
     logger.info("  ╔════════════════════════════════════════════════════╗")
     logger.info("  ║   VALIDACION MEDICA REQUERIDA                     ║")
@@ -65,12 +62,9 @@ def _show_validation_dialog() -> bool:
     """
     Muestra el dialogo de validacion.
     Primero intenta con Qt (Slicer), fallback a consola.
-
-    Returns:
-        True si el medico aprueba, False si rechaza
     """
     try:
-        from qt import QLabel, QVBoxLayout, QDialog, QPushButton, QApplication
+        from qt import QLabel, QVBoxLayout, QDialog, QPushButton
 
         dialog = QDialog()
         dialog.setWindowTitle("3Dosim - Validacion Medica Obligatoria")
@@ -127,7 +121,7 @@ def _show_validation_dialog() -> bool:
         return result[0]
 
     except ImportError:
-        # Fallback: consola
+        # Fallback a consola
         logger.info("  (Interfaz Qt no disponible, usando consola)")
         respuesta = input("  La segmentacion es correcta? (si/no): ").strip().lower()
         return respuesta in ("si", "s", "yes", "y")

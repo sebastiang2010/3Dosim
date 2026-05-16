@@ -3,22 +3,26 @@ Entry point del PipelineOrchestrator 3Dosim para 3D Slicer.
 
 Uso desde terminal:
   Slicer.exe --python-script main.py --data-dir "C:/ruta/datos"
-
-Para reiniciar checkpoints:
   Slicer.exe --python-script main.py --data-dir "C:/ruta/datos" --reset
-
-O desde la consola Python de Slicer:
-  exec(open("main.py").read())
 """
 
 import argparse
-import sys
 import os
+import sys
 
-from .pipeline import PipelineTestOrchestrator
+
+def _add_parent_to_path():
+    """Agrega Testing/ al sys.path para encontrar PipelineOrchestrator como paquete."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent = os.path.dirname(script_dir)  # Testing/
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    return parent
 
 
 def main():
+    _add_parent_to_path()
+
     parser = argparse.ArgumentParser(
         description="Pipeline orchestrator para SlicerDosim"
     )
@@ -33,8 +37,9 @@ def main():
         action="store_true",
         help="Reiniciar checkpoints (ignora estado guardado)",
     )
-    # Slicer puede pasar argumentos extra, los ignoramos
     args, _ = parser.parse_known_args()
+
+    from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
 
     orchestrator = PipelineTestOrchestrator(args.data_dir, reset=args.reset)
     orchestrator.run()
