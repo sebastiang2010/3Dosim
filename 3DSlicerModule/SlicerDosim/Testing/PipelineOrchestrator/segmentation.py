@@ -1,14 +1,11 @@
 """
-Segmentacion simple (threshold + morfologia).
+Segmentacion con TotalSegmentator (main thread) o simple (threshold + morfologia).
 
-NO usa TotalSegmentator porque el multiprocessing de PyTorch
-no funciona en el Python embebido de Slicer.
-
-Flujo:
-  1. Threshold: voxels > -200 HU (cuerpo, sin aire)
-  2. Cierre morfologico para rellenar huecos
-  3. Componente conectada mas grande
-  4. Crear segmentacion en Slicer via ImportLabelmapToSegmentationNode
+Modos:
+  - "totalsegmentator": ejecuta TotalSegmentator en main thread con:
+      device="cpu", fast=True, body_seg=True
+      MsgBox avisa que Slicer se congelara 5-15 min.
+  - "simple": threshold HU > -200 + cierre morfologico + componente conectada.
 """
 
 import logging
@@ -18,19 +15,147 @@ import time
 logger = logging.getLogger("3DosimTest")
 
 
-def run_segmentation(ct_node, output_dir: str):
+def check_totalsegmentator() -> bool:
+    """Verifica si TotalSegmentator esta instalado y funcional."""
+    try:
+        from totalsegmentator.python_api import totalsegmentator
+        logger.info("  TotalSegmentator detectado")
+        return True
+    except ImportError:
+        logger.info("  TotalSegmentator NO disponible")
+        logger.info("  -> Instalar: Extension Manager -> TotalSegmentator")
+        return False
+
+
+def run_segmentation_totalsegmentator(ct_node, output_dir: str):
     """
-    Segmentacion rapida por threshold + morfologia.
+    Ejecuta TotalSegmentator en MAIN thread (NUNCA en thread separado).
 
-    Args:
-        ct_node: vtkMRMLScalarVolumeNode del CT
-        output_dir: Directorio de salida
+    Parametros rapidos: device="cpu", fast=True, body_seg=True.
 
-    Returns:
-        segmentation_node: vtkMRMLSegmentationNode
+    IMPORTANTE: TotalSegmentator usa multiprocessing internamente,
+    lo cual es incompatible con threading en Slicer embebido.
+    Por eso se ejecuta en el main thread y se muestra una advertencia.
+    """
+    import slicer
+    from totalsegmentator.python_api import totalsegmentator
 
-    Raises:
-        RuntimeError: Si algo falla
+    logger.info("")
+    logger.info("  ========================================================")
+    logger.info("  TotalSegmentator MODO RAPIDO (main thread)")
+    logger.info("  ========================================================")
+    logger.info("")
+
+    # Advertencia al usuario
+    logger.info("  ATENCION: Slicer se congelara durante 5-15 min mientras")
+    logger.info("  TotalSegmentator procesa. No cerrar la ventana.")
+
+    try:
+        # Mostrar mensaje en Slicer
+        slicer.util.delayDisplay(
+            "TotalSegmentator: Slicer se congelara 5-15 min...\n"
+            "No cerrar la ventana ni hacer clic.",
+            autoClose=False
+        )
+    except Exception:
+        pass
+
+    t_start = time.time()
+
+    # Ruta temporal para NIfTI de salida
+    ts_output = os.path.join(output_dir, "totalsegmentator_output")
+    os.makedirs(ts_output, exist_ok=True)
+
+    # Ejecutar TotalSegmentator (main thread!)
+    logger.info("  Llamando TotalSegmentator (fast, body_seg)...")
+    logger.info("  (Slicer no responde hasta terminar)")
+    try:
+        # totalsegmentator espera el path a un archivo NIfTI
+        # Guardar CT temporal como NIfTI
+        ct_nifti_path = os.path.join(output_dir, "_ct_temp_for_ts.nii.gz")
+        logger.info(f"  Exportando CT a NIfTI temporal: {ct_nifti_path}")
+        slicer.util.saveNode(ct_node, ct_nifti_path)
+
+        logger.info("  Ejecutando TotalSegmentator...")
+        totalsegmentator(
+            input=ct_nifti_path,
+            output=ts_output,
+            device="cpu",
+            fast=True,
+            body_seg=True,
+        )
+        logger.info("  TotalSegmentator completado")
+
+        # Buscar el NIfTI de segmentacion generado
+        seg_nifti = None
+        for f in os.listdir(ts_output):
+            if f.endswith(".nii.gz") or f.endswith(".nii"):
+                seg_nifti = os.path.join(ts_output, f)
+                break
+
+        if not seg_nifti:
+            # Buscar en subdirectorios
+            for root, dirs, files in os.walk(ts_output):
+                for f in files:
+                    if f.endswith(".nii.gz") or f.endswith(".nii"):
+                        seg_nifti = os.path.join(root, f)
+                        break
+                if seg_nifti:
+                    break
+
+        if not seg_nifti:
+            raise RuntimeError("No se encontro archivo de segmentacion generado por TotalSegmentator")
+
+        logger.info(f"  Segmentacion encontrada: {seg_nifti}")
+
+        # Cargar el NIfTI de segmentacion en Slicer
+        seg_node = slicer.util.loadSegmentation(seg_nifti)
+        if seg_node is None:
+            # Fallback: cargar como volumen label y convertir
+            label_node = slicer.util.loadLabelVolume(seg_nifti)
+            if label_node is None:
+                raise RuntimeError("No se pudo cargar la segmentacion en Slicer")
+            seg_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+            seg_node.SetName("TotalSegmentator_Seg")
+            slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
+                label_node, seg_node
+            )
+            slicer.mrmlScene.RemoveNode(label_node)
+
+        seg_node.SetName("TotalSegmentator_Seg")
+
+        # Limpiar temp
+        try:
+            os.remove(ct_nifti_path)
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"  TotalSegmentator FALLO: {e}")
+        raise RuntimeError(f"TotalSegmentator fallo: {e}")
+
+    elapsed = int(time.time() - t_start)
+    logger.info(f"  TotalSegmentator completado en {elapsed}s")
+    logger.info(f"  Nodo: {seg_node.GetName()}")
+
+    # Cerrar dialogo si estaba abierto
+    try:
+        slicer.util.delayDisplay("", autoClose=True)
+    except Exception:
+        pass
+
+    return seg_node
+
+
+def run_segmentation_simple(ct_node, output_dir: str):
+    """
+    Segmentacion rapida por threshold + morfologia (sin TotalSegmentator).
+
+    Flujo:
+      1. Threshold: voxels > -200 HU (cuerpo, sin aire)
+      2. Cierre morfologico para rellenar huecos
+      3. Componente conectada mas grande
+      4. Crear segmentacion en Slicer via ImportLabelmapToSegmentationNode
     """
     import slicer
     import numpy as np
@@ -137,6 +262,29 @@ def run_segmentation(ct_node, output_dir: str):
     logger.info(f"  Nodo: {seg_node.GetName()}")
 
     return seg_node
+
+
+def run_segmentation(ct_node, output_dir: str, mode: str = "simple"):
+    """
+    Punto de entrada unificado.
+
+    Args:
+        ct_node: vtkMRMLScalarVolumeNode del CT
+        output_dir: Directorio de salida
+        mode: "simple" | "totalsegmentator"
+
+    Returns:
+        segmentation_node: vtkMRMLSegmentationNode
+    """
+    if mode == "totalsegmentator":
+        if not check_totalsegmentator():
+            logger.warning("  TotalSegmentator no instalado, fallback a simple")
+            mode = "simple"
+        else:
+            return run_segmentation_totalsegmentator(ct_node, output_dir)
+
+    # simple por defecto
+    return run_segmentation_simple(ct_node, output_dir)
 
 
 # Mantener compatibilidad

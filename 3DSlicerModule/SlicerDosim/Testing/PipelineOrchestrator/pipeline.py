@@ -38,7 +38,7 @@ class PipelineTestOrchestrator:
     STEP_GENERATE_MCNP = "generate_mcnp"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
-                 no_consola: bool = False):
+                 no_consola: bool = False, segmenter: str = "simple"):
         self.data_dir = data_dir
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
@@ -63,6 +63,10 @@ class PipelineTestOrchestrator:
         self.mcp_server = None
         self.mcp_port = mcp_port
         self.screenshots = []
+
+        # Metodo de segmentacion
+        self.segmenter = segmenter
+        logger.info(f"  Segmentador:    {segmenter}")
 
         # Consola interactiva de comandos
         self.no_consola = no_consola
@@ -113,6 +117,9 @@ class PipelineTestOrchestrator:
             self._report()
             return
 
+        # Save point 1: escena Slicer comprimida post-carga DICOM
+        self._save_scene("01_post_load_dicom")
+
         if not self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
                                      self._remove_couch_air):
             logger.warning("No se pudo eliminar camilla, continuando...")
@@ -130,8 +137,12 @@ class PipelineTestOrchestrator:
             logger.warning("Anonimizacion fallo, continuando...")
 
         # --- PASO CRITICO: SEGMENTACION ---
-        self._log_consola("Iniciando segmentacion con TotalSegmentator (5-15 min)")
-        seg_ok = self._checkpoint_step(self.STEP_SEGMENT, "Segmentando (TotalSegmentator)",
+        seg_display = f"Segmentando ({self.segmenter})"
+        if self.segmenter == "totalsegmentator":
+            self._log_consola("Iniciando TotalSegmentator modo rapido (5-15 min, Slicer se congelara)")
+        else:
+            self._log_consola("Iniciando segmentacion simple (threshold + morfologia)")
+        seg_ok = self._checkpoint_step(self.STEP_SEGMENT, seg_display,
                                        self._segment)
         if not seg_ok:
             logger.error("")
@@ -154,6 +165,9 @@ class PipelineTestOrchestrator:
             self._log_consola("Validacion medica RECHAZADA. Pipeline detenido.")
             self._report()
             return
+
+        # Save point 2: escena Slicer comprimida post-validacion medica
+        self._save_scene("02_post_validacion")
 
         self._checkpoint_step(self.STEP_EXPORT_NIFTI, "Exportando phantom a NIfTI",
                               self._export_nifti)
@@ -349,6 +363,43 @@ class PipelineTestOrchestrator:
             self._log_consola_error(f"Screenshot fallo: {nombre} — {e}")
             return None
 
+    def _save_scene(self, tag: str) -> "str | None":
+        """Guarda la escena actual de Slicer en formato .mrb (comprimido).
+
+        Args:
+            tag: Identificador del save point (ej: '01_post_load_dicom')
+
+        Returns:
+            Ruta al archivo .mrb, o None si falla.
+        """
+        try:
+            import slicer
+            from datetime import datetime
+
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"3Dosim_scene_{tag}_{ts}.mrb"
+            filepath = os.path.join(self.output_dir, "scenes", filename)
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+            logger.info(f"  Guardando escena Slicer (MRB comprimido)...")
+            logger.info(f"  Destino: {filepath}")
+
+            # slicer.util.saveScene guarda en .mrb si la extension es .mrb
+            success = slicer.util.saveScene(filepath)
+
+            if success:
+                logger.info(f"  Escena guardada OK: {os.path.basename(filepath)}")
+                self._log_consola_ok(f"Escena guardada: {os.path.basename(filepath)}")
+                return filepath
+            else:
+                logger.warning(f"  saveScene devolvio False")
+                return None
+
+        except Exception as e:
+            logger.warning(f"  No se pudo guardar escena '{tag}': {e}")
+            self._log_consola_error(f"Escena no guardada: {tag} — {e}")
+            return None
+
     def _load_dicom(self):
         import slicer
         from DICOMLib import DICOMUtils
@@ -490,7 +541,9 @@ class PipelineTestOrchestrator:
         couch_remover.remove_couch_and_air(self.ct_node)
 
     def _segment(self):
-        seg_node = segmentation.run_segmentation(self.ct_node, self.output_dir)
+        seg_node = segmentation.run_segmentation(
+            self.ct_node, self.output_dir, mode=self.segmenter
+        )
         self.segmentation_node = seg_node
 
     def _do_validation(self):

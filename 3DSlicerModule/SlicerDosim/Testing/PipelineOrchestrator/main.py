@@ -44,6 +44,13 @@ def main():
         help="Puerto para el servidor MCP (default: 0 = deshabilitado)",
     )
     parser.add_argument(
+        "--segmenter",
+        type=str,
+        default="simple",
+        choices=["simple", "totalsegmentator"],
+        help="Metodo de segmentacion: 'simple' (threshold) o 'totalsegmentator' (rapido)",
+    )
+    parser.add_argument(
         "--no-consola",
         action="store_true",
         help="Deshabilita la consola interactiva de comandos",
@@ -57,6 +64,7 @@ def main():
         reset=args.reset,
         mcp_port=args.mcp_port,
         no_consola=args.no_consola,
+        segmenter=args.segmenter,
     )
     orchestrator.run()
 
