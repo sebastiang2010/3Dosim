@@ -23,6 +23,10 @@ def _add_parent_to_path():
 def main():
     _add_parent_to_path()
 
+    # Cerrar otras instancias de Slicer antes de comenzar
+    from PipelineOrchestrator.utils import kill_existing_slicer
+    kill_existing_slicer()
+
     parser = argparse.ArgumentParser(
         description="Pipeline orchestrator para SlicerDosim"
     )
@@ -60,6 +64,18 @@ def main():
         action="store_true",
         help="Ejecuta hasta antes de segmentacion, luego muestra parametros TS y sale",
     )
+    parser.add_argument(
+        "--force-cpu",
+        action="store_true",
+        default=True,
+        help="Fuerza CPU en TotalSegmentator (desactiva GPU)",
+    )
+    parser.add_argument(
+        "--no-force-cpu",
+        action="store_false",
+        dest="force_cpu",
+        help="Permite GPU en TotalSegmentator si esta disponible",
+    )
     args, _ = parser.parse_known_args()
 
     from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
@@ -71,6 +87,7 @@ def main():
         no_consola=args.no_consola,
         segmenter=args.segmenter,
         stop_before_segment=args.stop_before_segment,
+        force_cpu=args.force_cpu,
     )
     orchestrator.run()
 

@@ -1,134 +1,107 @@
 """
-Segmentacion con TotalSegmentator (main thread) o simple (threshold + morfologia).
+Segmentacion con TotalSegmentator (via TotalSegmentatorLogic.process()) o simple.
 
 Modos:
-  - "totalsegmentator": ejecuta TotalSegmentator en main thread con:
-      device="cpu", fast=True, body_seg=True
-      MsgBox avisa que Slicer se congelara 5-15 min.
+  - "totalsegmentator": ejecuta TotalSegmentator a traves de la API interna de Slicer:
+      slicer.modules.totalsegmentator.logic().process(inputVolume, outputSegmentation, ...)
+      El modulo maneja internamente la exportacion/importacion de archivos temporales.
   - "simple": threshold HU > -200 + cierre morfologico + componente conectada.
 """
 
 import logging
-import os
 import time
 
 logger = logging.getLogger("3DosimTest")
 
 
 def check_totalsegmentator() -> bool:
-    """Verifica si TotalSegmentator esta instalado y funcional."""
+    """Verifica si TotalSegmentator esta instalado como modulo de Slicer."""
+    import slicer
     try:
-        from totalsegmentator.python_api import totalsegmentator
-        logger.info("  TotalSegmentator detectado")
-        return True
-    except ImportError:
+        has_module = hasattr(slicer.modules, 'totalsegmentator')
+        if has_module:
+            logger.info("  TotalSegmentator (modulo de Slicer) detectado")
+        else:
+            logger.info("  TotalSegmentator NO disponible como modulo de Slicer")
+            logger.info("  -> Instalar: Extension Manager -> TotalSegmentator")
+        return has_module
+    except Exception:
         logger.info("  TotalSegmentator NO disponible")
-        logger.info("  -> Instalar: Extension Manager -> TotalSegmentator")
         return False
 
 
-def run_segmentation_totalsegmentator(ct_node, output_dir: str):
+def run_segmentation_totalsegmentator(ct_node_name: str, output_dir: str, force_cpu: bool = True):
     """
-    Ejecuta TotalSegmentator en MAIN thread (NUNCA en thread separado).
+    Ejecuta TotalSegmentator via TotalSegmentatorLogic.process() (API interna de Slicer).
+    Busca el volumen por su NOMBRE en la escena de Slicer.
 
-    Parametros rapidos: device="cpu", fast=True, body_seg=True.
+    Referencia: TotalSegmentator.py → TotalSegmentatorLogic.process()
+    (NO usar slicer.cli.run() - TS no es CLI module, no tiene CreateNodeInScene)
 
-    IMPORTANTE: TotalSegmentator usa multiprocessing internamente,
-    lo cual es incompatible con threading en Slicer embebido.
-    Por eso se ejecuta en el main thread y se muestra una advertencia.
+    Args:
+        ct_node_name: Nombre del volumen CT en la escena de Slicer (ej: "3Dosim_CT_anon")
+        output_dir: (no usado, compatibility)
+        force_cpu: True fuerza CPU, False permite GPU si disponible
     """
     import slicer
-    from totalsegmentator.python_api import totalsegmentator
 
     logger.info("")
     logger.info("  ========================================================")
-    logger.info("  TotalSegmentator MODO RAPIDO (main thread)")
+    logger.info("  TotalSegmentator via TotalSegmentatorLogic.process()")
     logger.info("  ========================================================")
     logger.info("")
-
-    # Advertencia al usuario
-    logger.info("  ATENCION: Slicer se congelara durante 5-15 min mientras")
-    logger.info("  TotalSegmentator procesa. No cerrar la ventana.")
-
-    try:
-        # Mostrar mensaje en Slicer
-        slicer.util.delayDisplay(
-            "TotalSegmentator: Slicer se congelara 5-15 min...\n"
-            "No cerrar la ventana ni hacer clic.",
-            autoClose=False
-        )
-    except Exception:
-        pass
 
     t_start = time.time()
 
-    # Ruta temporal para NIfTI de salida
-    ts_output = os.path.join(output_dir, "totalsegmentator_output")
-    os.makedirs(ts_output, exist_ok=True)
+    # Buscar el volumen CT por su nombre en la escena de Slicer
+    ct_node = slicer.util.getNode(ct_node_name)
+    if ct_node is None:
+        raise RuntimeError(f"No se encontro volumen '{ct_node_name}' en la escena")
+    logger.info(f"  Volumen CT encontrado: '{ct_node.GetName()}'")
 
-    # Ejecutar TotalSegmentator (main thread!)
-    logger.info("  Llamando TotalSegmentator (fast, body_seg)...")
-    logger.info("  (Slicer no responde hasta terminar)")
+    # Cambiar al modulo TotalSegmentator para que el usuario vea el progreso
     try:
-        # totalsegmentator espera el path a un archivo NIfTI
-        # Guardar CT temporal como NIfTI
-        ct_nifti_path = os.path.join(output_dir, "_ct_temp_for_ts.nii.gz")
-        logger.info(f"  Exportando CT a NIfTI temporal: {ct_nifti_path}")
-        slicer.util.saveNode(ct_node, ct_nifti_path)
+        slicer.util.selectModule("TotalSegmentator")
+        slicer.app.processEvents()
+        logger.info("  Cambiado al modulo TotalSegmentator")
+    except Exception:
+        pass  # No critico
 
-        logger.info("  Ejecutando TotalSegmentator...")
-        totalsegmentator(
-            input=ct_nifti_path,
-            output=ts_output,
-            device="cpu",
+    # Crear nodo de segmentacion de salida
+    seg_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+    seg_node.SetName("TotalSegmentator_Seg")
+    seg_node.CreateDefaultDisplayNodes()
+
+    try:
+        # Instanciar TotalSegmentatorLogic directamente (NO slicer.modules.totalsegmentator.logic()
+        # que devuelve ScriptedLoadableModuleLogic generico sin process())
+        from TotalSegmentator import TotalSegmentatorLogic
+
+        logic = TotalSegmentatorLogic()
+        logic.logCallback = lambda msg: logger.info(f"  [TS] {msg}")
+        logic.clearOutputFolder = True
+        logic.useStandardSegmentNames = True
+
+        device_str = "CPU" if force_cpu else "auto (GPU si disponible)"
+        logger.info(f"  Device: {device_str}")
+        logger.info(f"  Task: total (fast=True)")
+
+        # Paso 1: asegurar que los paquetes Python de TS esten instalados
+        logger.info("  Verificando/instalando dependencias Python de TotalSegmentator...")
+        logic.setupPythonRequirements()
+        logger.info("  Dependencias OK")
+
+        # Paso 2: ejecutar segmentacion
+        logger.info("  Ejecutando TotalSegmentator (Slicer no responde hasta terminar)...")
+        logic.process(
+            inputVolume=ct_node,
+            outputSegmentation=seg_node,
             fast=True,
-            body_seg=True,
+            cpu=force_cpu,
+            task="total",
+            interactive=False
         )
         logger.info("  TotalSegmentator completado")
-
-        # Buscar el NIfTI de segmentacion generado
-        seg_nifti = None
-        for f in os.listdir(ts_output):
-            if f.endswith(".nii.gz") or f.endswith(".nii"):
-                seg_nifti = os.path.join(ts_output, f)
-                break
-
-        if not seg_nifti:
-            # Buscar en subdirectorios
-            for root, dirs, files in os.walk(ts_output):
-                for f in files:
-                    if f.endswith(".nii.gz") or f.endswith(".nii"):
-                        seg_nifti = os.path.join(root, f)
-                        break
-                if seg_nifti:
-                    break
-
-        if not seg_nifti:
-            raise RuntimeError("No se encontro archivo de segmentacion generado por TotalSegmentator")
-
-        logger.info(f"  Segmentacion encontrada: {seg_nifti}")
-
-        # Cargar el NIfTI de segmentacion en Slicer
-        seg_node = slicer.util.loadSegmentation(seg_nifti)
-        if seg_node is None:
-            # Fallback: cargar como volumen label y convertir
-            label_node = slicer.util.loadLabelVolume(seg_nifti)
-            if label_node is None:
-                raise RuntimeError("No se pudo cargar la segmentacion en Slicer")
-            seg_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
-            seg_node.SetName("TotalSegmentator_Seg")
-            slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
-                label_node, seg_node
-            )
-            slicer.mrmlScene.RemoveNode(label_node)
-
-        seg_node.SetName("TotalSegmentator_Seg")
-
-        # Limpiar temp
-        try:
-            os.remove(ct_nifti_path)
-        except Exception:
-            pass
 
     except Exception as e:
         logger.error(f"  TotalSegmentator FALLO: {e}")
@@ -137,12 +110,6 @@ def run_segmentation_totalsegmentator(ct_node, output_dir: str):
     elapsed = int(time.time() - t_start)
     logger.info(f"  TotalSegmentator completado en {elapsed}s")
     logger.info(f"  Nodo: {seg_node.GetName()}")
-
-    # Cerrar dialogo si estaba abierto
-    try:
-        slicer.util.delayDisplay("", autoClose=True)
-    except Exception:
-        pass
 
     return seg_node
 
@@ -264,14 +231,16 @@ def run_segmentation_simple(ct_node, output_dir: str):
     return seg_node
 
 
-def run_segmentation(ct_node, output_dir: str, mode: str = "simple"):
+def run_segmentation(ct_node, output_dir: str, mode: str = "simple",
+                     force_cpu: bool = True):
     """
     Punto de entrada unificado.
 
     Args:
-        ct_node: vtkMRMLScalarVolumeNode del CT
+        ct_node: vtkMRMLScalarVolumeNode del CT (o nombre del nodo en TS mode)
         output_dir: Directorio de salida
         mode: "simple" | "totalsegmentator"
+        force_cpu: True fuerza CPU en TotalSegmentator
 
     Returns:
         segmentation_node: vtkMRMLSegmentationNode
@@ -281,7 +250,11 @@ def run_segmentation(ct_node, output_dir: str, mode: str = "simple"):
             logger.warning("  TotalSegmentator no instalado, fallback a simple")
             mode = "simple"
         else:
-            return run_segmentation_totalsegmentator(ct_node, output_dir)
+            # Para TS mode, ct_node debe ser el NOMBRE del nodo en la escena
+            ct_name = ct_node if isinstance(ct_node, str) else ct_node.GetName()
+            return run_segmentation_totalsegmentator(
+                ct_name, output_dir, force_cpu=force_cpu
+            )
 
     # simple por defecto
     return run_segmentation_simple(ct_node, output_dir)

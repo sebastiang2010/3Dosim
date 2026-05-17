@@ -73,3 +73,84 @@ def show_progress(message: str):
         slicer.app.processEvents()
     except ImportError:
         pass  # Fuera de Slicer, silencioso
+
+
+def kill_existing_slicer():
+    """
+    Cierra otras instancias de 3D Slicer abiertas (excepto la actual).
+
+    Usa PowerShell para listar y matar procesos 'Slicer' (mas confiable que tasklist).
+    Se ejecuta al inicio del pipeline para evitar conflictos
+    con instancias previas de Slicer que puedan estar usando
+    archivos temporales o recursos compartidos.
+    """
+    import subprocess
+    import os
+    import time
+
+    try:
+        current_pid = os.getpid()
+    except AttributeError:
+        logger.warning("  No se pudo obtener PID actual, saltando cierre de Slicer")
+        return
+
+    logger.info("")
+    logger.info("  Buscando otras instancias de Slicer...")
+
+    try:
+        # Usar PowerShell: busca procesos 'Slicer' que no sean el actual
+        ps_find = (
+            f"$cur={current_pid}; "
+            "Get-Process -Name 'Slicer' -ErrorAction SilentlyContinue | "
+            "Where-Object { $_.Id -ne $cur } | "
+            "ForEach-Object { $_.Id.ToString() }"
+        )
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_find],
+            capture_output=True, text=True, timeout=15
+        )
+
+        pids = []
+        for line in result.stdout.strip().split('\n'):
+            line = line.strip()
+            if line:
+                try:
+                    pids.append(int(line))
+                except ValueError:
+                    continue
+
+        if not pids:
+            logger.info("  Ninguna otra instancia de Slicer encontrada")
+            return
+
+        killed = 0
+        for pid in pids:
+            if pid == current_pid:
+                continue
+            logger.info(f"  Cerrando Slicer PID {pid}...")
+            kill_result = subprocess.run(
+                ['powershell', '-NoProfile', '-Command',
+                 f'Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue'],
+                capture_output=True, timeout=10
+            )
+            if kill_result.returncode == 0:
+                killed += 1
+                logger.info(f"    PID {pid} cerrado")
+            else:
+                logger.warning(f"    No se pudo cerrar PID {pid}")
+
+        if killed > 0:
+            logger.info(f"  {killed} instancias de Slicer cerradas")
+        else:
+            logger.info("  Ninguna otra instancia de Slicer encontrada")
+
+        # Dar tiempo a que los procesos terminen
+        if killed > 0:
+            time.sleep(2)
+
+    except FileNotFoundError:
+        logger.warning("  PowerShell no disponible")
+    except subprocess.TimeoutExpired:
+        logger.warning("  Timeout buscando procesos Slicer")
+    except Exception as e:
+        logger.debug(f"  Error cerrando Slicer existente: {e}")

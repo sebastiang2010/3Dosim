@@ -1,148 +1,113 @@
 """
-Generacion y verificacion de entrada MCNP (Modulo 2).
+Paso 5: Escribir archivo .i MCNP final.
 
-Construye el archivo .i completo:
-  - Materiales (M cards)
-  - Geometria (RPP, lattice fill)
-  - Fuente (SDEF desde PET)
-  - Tallies (FMESH4, F6, modo, NPS)
-  - Verificacion de 8 checks de validez
+Combina las piezas generadas en los pasos anteriores:
+  - Tarjetas de materiales (M)
+  - Tarjetas de geometria (celdas + superficies)
+  - Tarjetas de fuente (SDEF)
+  - Tarjetas de tallies (FMESH4, F6, NPS, MODE)
+
+Verifica el .i con 8 checks de validez.
 """
 
 import logging
 import os
+import time
 
 logger = logging.getLogger("3DosimTest")
 
 
-def generate_mcnp_input(ct_node, output_dir: str, data_dir: str = None):
+def write_mcnp(geom_data: dict, source_data: dict, tally_data: dict,
+               phantom_data: dict, output_dir: str):
     """
-    Genera entrada MCNP y verifica el .i.
-    Usa arrays numpy directamente para construir el phantom.
+    Escribe el archivo .i MCNP a partir de las piezas pre-construidas.
 
     Args:
-        ct_node: vtkMRMLScalarVolumeNode del CT
-        output_dir: Directorio donde guardar el .i
-        data_dir: Directorio de datos (opcional, para PET)
+        geom_data: dict de geometry_builder.build_geometry()
+            Debe contener: mat_cards, geom_cards
+        source_data: dict de source_builder.build_source()
+            Debe contener: source_cards, iso_data
+        tally_data: dict de tally_builder.build_tallies()
+            Debe contener: tally_cards
+        phantom_data: dict de phantom_builder.build_phantom()
+            Debe contener: dims, origin, spacing
+        output_dir: Directorio de salida
 
     Returns:
         Ruta al archivo .i generado
     """
-    import numpy as np
-    from SlicerDosim.SlicerDosimLib import (
-        MCNPMaterialMapper, MCNPGeometryBuilder,
-        MCNPTallyBuilder, TissueConfig
-    )
+    logger.info("")
+    logger.info("  ========================================================")
+    logger.info("  [PASO 5/5] Escribiendo archivo MCNP .i")
+    logger.info("  ========================================================")
+    logger.info("")
 
-    config = TissueConfig()
-    dims = ct_node.GetImageData().GetDimensions()
-    origin = ct_node.GetOrigin()
-    spacing = ct_node.GetSpacing()
+    t_start = time.time()
+
+    iso_data = source_data["iso_data"]
+    mat_cards = geom_data["mat_cards"]
+    geom_cards = geom_data["geom_cards"]
+    source_cards = source_data["source_cards"]
+    tally_cards = tally_data["tally_cards"]
 
     mcnp_dir = os.path.join(output_dir, "mcnp")
-    if not os.path.exists(mcnp_dir):
-        os.makedirs(mcnp_dir)
+    os.makedirs(mcnp_dir, exist_ok=True)
 
-    logger.info("  Creando phantom array...")
+    # Nombre del isotopo para el archivo
+    iso_name = iso_data.get("name", "isotopo").replace("-", "_").replace(" ", "_")
+    input_path = os.path.join(mcnp_dir, f"3Dosim_MCNP_{iso_name}.i")
 
-    # Phantom simplificado: elipse de higado (90) + tumor (100)
-    step = 4
-    sx, sy, sz = dims[0] // step, dims[1] // step, dims[2] // step
-    phantom_arr = np.ones((sx, sy, sz), dtype=np.uint8)
-    cx, cy, cz = sx // 2, sy // 2, sz // 2
+    # Armar contenido
+    lines = [
+        f"3Dosim MCNP - {iso_data.get('name', 'Dosimetria')}",
+        "C Generado por PipelineOrchestrator 3Dosim v3.14",
+        f"C Isotopo: {iso_data.get('name', 'N/A')}  ZAID={iso_data.get('zaid', 0)}",
+        f"C Particula: {iso_data.get('particle', '?')}  Modo: {iso_data.get('mode', '?')}",
+        f"C Dimensiones: {phantom_data['dims']}",
+        f"C Origen: {phantom_data['origin']}",
+        f"C Espaciado: {phantom_data['spacing']}",
+        "C",
+        "C ============================================================",
+        "C === MATERIALES ===",
+        "C ============================================================",
+    ]
+    lines.extend(mat_cards)
+    lines.append("C")
+    lines.append("C ============================================================")
+    lines.append("C === GEOMETRIA (celdas + superficies) ===")
+    lines.append("C ============================================================")
+    lines.extend(geom_cards)
+    lines.append("C")
+    lines.append("C ============================================================")
+    lines.append("C === FUENTE ===")
+    lines.append("C ============================================================")
+    lines.extend(source_cards)
+    lines.append("C")
+    lines.append("C ============================================================")
+    lines.append("C === TALLIES (detectores) ===")
+    lines.append("C ============================================================")
+    lines.extend(tally_cards)
 
-    # Elipse higado
-    rx, ry, rz = sx // 4, sy // 4, sz // 3
-    for z in range(max(0, cz - rz), min(sz, cz + rz)):
-        for y in range(sy):
-            for x in range(sx):
-                dx, dy, dz = (x - cx) / rx, (y - cy) / ry, (z - cz) / rz
-                if dx * dx + dy * dy + dz * dz <= 1:
-                    phantom_arr[x, y, z] = 90
+    # Ultima linea en blanco
+    lines.append("")
 
-    # Esfera tumor
-    tcx, tcy, tcz = cx + rx // 2, cy, cz
-    tr = sx // 16
-    for z in range(max(0, tcz - tr), min(sz, tcz + tr)):
-        for y in range(sy):
-            for x in range(sx):
-                dx, dy, dz = x - tcx, y - tcy, z - tcz
-                if dx * dx + dy * dy + dz * dz <= tr * tr:
-                    phantom_arr[x, y, z] = 100
+    with open(input_path, "w") as f:
+        f.write("\n".join(lines))
 
-    logger.info(f"  Phantom array: {sx}x{sy}x{sz}")
-    logger.info(f"  Indices: {sorted(np.unique(phantom_arr))}")
-
-    # --- Materiales ---
-    logger.info("  [A] Asignando materiales...")
-    mapper = MCNPMaterialMapper(config)
-    mat_arr = mapper.assign_from_labelmap(phantom_arr)
-    mat_cards = mapper.generate_material_cards()
-    logger.info(f"      Materiales: {sorted(mapper.get_material_ids_used())}")
-    logger.info(f"      Tarjetas M: {len(mat_cards)}")
-
-    # --- Geometria ---
-    logger.info("  [B] Construyendo geometria...")
-    geo_builder = MCNPGeometryBuilder(config)
-    geom_cards = geo_builder.build((sx, sy, sz), origin, spacing, mat_arr)
-    logger.info(f"      Tarjetas geometria: {len(geom_cards)}")
-
-    # --- Tallies ---
-    logger.info("  [C] Configurando tallies...")
-    iso_data = {
-        "name": "Yttrium-90", "zaid": 39090, "energy_mev": 2.28,
-        "particle": "electron", "mode": "e",
-    }
-    tal_builder = MCNPTallyBuilder()
-    tal_cards = tal_builder.build(iso_data, (sx, sy, sz), n_particles=1000000, origin=origin)
-    logger.info(f"      Tarjetas tallies: {len(tal_cards)}")
-
-    # --- Escribir archivo .i ---
-    logger.info("  [D] Escribiendo archivo .i...")
-    input_path = os.path.join(mcnp_dir, "3Dosim_MCNP_Y90.i")
-    _write_i_file(input_path, mat_cards, geom_cards, tal_cards)
+    logger.info(f"  Archivo escrito: {input_path}")
 
     # Verificar
     verify_mcnp_input(input_path)
-    logger.info(f"  MCNP input generado: {input_path}")
+
+    elapsed = time.time() - t_start
+    logger.info(f"  Archivo .i generado en {elapsed:.1f}s")
     return input_path
-
-
-def _write_i_file(path: str, mat_cards, geom_cards, tal_cards):
-    """Escribe archivo .i MCNP formateado."""
-    src_cards = [
-        "C FUENTE uniforme (placeholder)",
-        "SDEF  POS=0 0 0  ERG=D1  PAR=2",
-        "SI1  L  0.9357  2.2807",
-        "SP1  D  1.0  0.0",
-    ]
-    lines = [
-        "3Dosim MCNP test - SlicerDosim",
-        "C Generado por PipelineOrchestrator",
-    ]
-    lines.append("C")
-    lines.append("C ===== MATERIALES =====")
-    lines.extend(mat_cards)
-    lines.append("C")
-    lines.append("C ===== GEOMETRIA =====")
-    lines.extend(geom_cards)
-    lines.append("C")
-    lines.append("C ===== FUENTE =====")
-    lines.extend(src_cards)
-    lines.append("C")
-    lines.append("C ===== TALLIES =====")
-    lines.extend(tal_cards)
-
-    with open(path, "w") as f:
-        f.write("\n".join(lines))
-        f.write("\n")
-    logger.info(f"  .i escrito: {path}")
 
 
 def verify_mcnp_input(path: str):
     """
     Verifica que el archivo .i MCNP sea valido.
-    Chequea 8 condiciones: header, M cards, geometria, SDEF, FMESH4, NPS, MODE, lattice.
+    8 checks: header, M cards, geometria, SDEF, FMESH4, NPS, MODE, lattice.
 
     Args:
         path: Ruta al archivo .i
@@ -177,9 +142,10 @@ def verify_mcnp_input(path: str):
             all_ok = False
 
     line_count = content.count("\n") + 1
-    logger.info(f"  Archivo: {line_count} lineas, {len(content)} caracteres")
+    file_size = os.path.getsize(path)
+    logger.info(f"  Archivo: {line_count} lineas, {file_size/1024:.1f} KB")
 
     if not all_ok:
         raise RuntimeError("Archivo MCNP no paso las verificaciones")
 
-    logger.info("  Archivo MCNP valido")
+    logger.info("  Archivo MCNP valido (todas las verificaciones OK)")

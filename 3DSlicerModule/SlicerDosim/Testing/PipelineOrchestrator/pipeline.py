@@ -13,6 +13,10 @@ from PipelineOrchestrator import couch_remover
 from PipelineOrchestrator import segmentation
 from PipelineOrchestrator import validation
 from PipelineOrchestrator import mcnp_builder
+from PipelineOrchestrator import phantom_builder
+from PipelineOrchestrator import source_builder
+from PipelineOrchestrator import geometry_builder
+from PipelineOrchestrator import tally_builder
 from PipelineOrchestrator import git_commit
 from PipelineOrchestrator.utils import logger, add_module_path, show_progress
 from PipelineOrchestrator.mcp_helper import MCP
@@ -33,13 +37,16 @@ class PipelineTestOrchestrator:
     STEP_ANONYMIZE     = "anonymize"
     STEP_REMOVE_COUCH  = "remove_couch_air"
     STEP_SEGMENT       = "segment_phantom"
-    STEP_VALIDATE      = "validate_segmentation"
-    STEP_EXPORT_NIFTI  = "export_nifti"
-    STEP_GENERATE_MCNP = "generate_mcnp"
+    STEP_VALIDATE       = "validate_segmentation"
+    STEP_BUILD_PHANTOM  = "build_phantom"
+    STEP_BUILD_SOURCE   = "build_source"
+    STEP_BUILD_GEOMETRY = "build_geometry"
+    STEP_BUILD_TALLIES  = "build_tallies"
+    STEP_WRITE_MCNP     = "write_mcnp"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
                  no_consola: bool = False, segmenter: str = "simple",
-                 stop_before_segment: bool = False):
+                 stop_before_segment: bool = False, force_cpu: bool = True):
         self.data_dir = data_dir
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
@@ -58,6 +65,12 @@ class PipelineTestOrchestrator:
         self.segmentation_node = None
         self.phantom_nifti_path = None
         self.mcnp_path = None
+        self.ct_node_name = None
+        self.pet_node_name = None
+        self.phantom_data = None   # dict de phantom_builder.build_phantom()
+        self.source_data = None    # dict de source_builder.build_source()
+        self.geom_data = None      # dict de geometry_builder.build_geometry()
+        self.tally_data = None     # dict de tally_builder.build_tallies()
 
         # MCP: servidor para que externos monitoreen + screenshots
         self.mcp = MCP()
@@ -69,12 +82,16 @@ class PipelineTestOrchestrator:
         self.segmenter = segmenter
         logger.info(f"  Segmentador:    {segmenter}")
 
+        # Forzar CPU en TotalSegmentator
+        self.force_cpu = force_cpu
+        logger.info(f"  Force CPU:      {force_cpu}")
+
         # Stop antes de segmentacion (para hacer TS manual)
         self.stop_before_segment = stop_before_segment
         if stop_before_segment:
             logger.info("  Modo:           STOP antes de segmentacion (manual)")
 
-        # Consola interactiva de comandos
+        # Consola interactiva de comandos (habilitada por defecto)
         self.no_consola = no_consola
         self.consola = None
         if not no_consola:
@@ -91,6 +108,7 @@ class PipelineTestOrchestrator:
         logger.info(f"Output:       {self.output_dir}")
         logger.info(f"Checkpoints:  {self.checkpoint_dir}")
         logger.info(f"Reset:        {'SI' if reset else 'NO (retoma checkpoints)'}")
+        logger.info(f"Consola:      {'SI' if not no_consola else 'NO'}")
         logger.info("")
 
     # ==================================================================
@@ -114,33 +132,44 @@ class PipelineTestOrchestrator:
         self._log_consola("Iniciando pipeline...")
 
         if self._checkpoint_step(self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
-                                 self._check_slicer):
+                                 self._check_slicer,
+                                 data_func=lambda: {"slicer_version": self._slicer_version()}):
             add_module_path()
 
         if not self._checkpoint_step(self.STEP_LOAD_DICOM, "Cargando imagenes DICOM",
-                                     self._load_dicom):
+                                     self._load_dicom,
+                                     data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                                                        "pet_node_name": self.pet_node.GetName() if self.pet_node else None,
+                                                        "ct_dir": self.ct_dir,
+                                                        "pet_dir": self.pet_dir}):
             logger.error("Fallo critico en carga DICOM. Abortando.")
             self._report()
             return
 
         # Save point 1: escena Slicer comprimida post-carga DICOM
         self._save_scene("01_post_load_dicom")
+        self.tomar_screenshot("01_carga_dicom")
 
         if not self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
-                                     self._remove_couch_air):
+                                     self._remove_couch_air,
+                                     data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None}):
             logger.warning("No se pudo eliminar camilla, continuando...")
+        self._save_scene("02_remove_couch")
+        self.tomar_screenshot("02_remove_couch")
 
         if not self._checkpoint_step(self.STEP_SHOW_FUSION, "Mostrando fusion CT+PET",
                                      self._show_fusion):
             logger.warning("No se pudo mostrar fusion, continuando de todos modos")
-
-        # Screenshot de la fusion
-        if self.ct_node:
-            self.tomar_screenshot("fusion")
+        self._save_scene("03_fusion_ct_pet")
+        self.tomar_screenshot("03_fusion_ct_pet")
 
         if not self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
-                                     self._anonymize):
+                                     self._anonymize,
+                                     data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                                                        "pet_node_name": self.pet_node.GetName() if self.pet_node else None}):
             logger.warning("Anonimizacion fallo, continuando...")
+        self._save_scene("04_anonymize")
+        self.tomar_screenshot("04_anonymize")
 
         # --- STOP BEFORE SEGMENT (para hacer TS manual) ---
         if self.stop_before_segment:
@@ -162,23 +191,13 @@ class PipelineTestOrchestrator:
             logger.info(f"  DICOM anon:   {self.anon_dir}")
             logger.info("")
             logger.info("Para correr TotalSegmentator manual:")
-            logger.info("  Parametros recomendados (fast):")
-            logger.info("    device='cpu'")
-            logger.info("    fast=True")
-            logger.info("    body_seg=True")
-            logger.info("")
-            logger.info("  Desde Python en Slicer:")
-            logger.info("    from totalsegmentator.python_api import totalsegmentator")
-            logger.info("    totalsegmentator(")
-            logger.info('        input="path/to/ct.nii.gz",')
-            logger.info('        output="path/to/output",')
-            logger.info("        device='cpu', fast=True, body_seg=True")
-            logger.info("    )")
-            logger.info("")
-            logger.info("  O desde terminal externa:")
-            logger.info("    TotalSegmentator -i ct.nii.gz -o ts_output --fast --body_seg")
-            logger.info("")
-            logger.info("  Luego cargar resultado en Slicer y continuar con validacion.")
+            logger.info("  Desde la consola Python de Slicer:")
+            logger.info("    from TotalSegmentator import TotalSegmentatorLogic")
+            logger.info("    seg_node = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')")
+            logger.info("    logic = TotalSegmentatorLogic()")
+            logger.info("    logic.setupPythonRequirements()")
+            logger.info("    logic.process(inputVolume=ct_node, outputSegmentation=seg_node,")
+            logger.info("                  fast=True, cpu=True, task='total')")
             logger.info("")
             logger.info("  Para retomar pipeline (sin --reset):")
             logger.info("    Segmentacion manual lista → ejecutar sin --reset")
@@ -201,7 +220,9 @@ class PipelineTestOrchestrator:
         else:
             self._log_consola("Iniciando segmentacion simple (threshold + morfologia)")
         seg_ok = self._checkpoint_step(self.STEP_SEGMENT, seg_display,
-                                       self._segment)
+                                       self._segment,
+                                       data_func=lambda: {"segmentation_node_name": self.segmentation_node.GetName() if self.segmentation_node else None,
+                                                          "segmenter": self.segmenter})
         if not seg_ok:
             logger.error("")
             logger.error("=" * 60)
@@ -212,34 +233,45 @@ class PipelineTestOrchestrator:
             self._report()
             return
 
-        # Screenshot de la segmentacion
-        self.tomar_screenshot("segmentacion")
+        # Save scene + screenshot post-segmentacion
+        self._save_scene("05_segmentacion")
+        self.tomar_screenshot("05_segmentacion")
 
         # --- PASO CRITICO: VALIDACION MEDICA ---
         self._log_consola("Esperando validacion medica de la segmentacion...")
         if not self._checkpoint_step(self.STEP_VALIDATE, "Validacion medica de la segmentacion",
-                                     self._do_validation):
+                                     self._do_validation,
+                                     data_func=lambda: {"validado_por": "medico",
+                                                        "timestamp": __import__('datetime').datetime.now().isoformat()}):
             logger.error("Validacion medica rechazada. Pipeline detenido.")
             self._log_consola("Validacion medica RECHAZADA. Pipeline detenido.")
             self._report()
             return
 
         # Save point 2: escena Slicer comprimida post-validacion medica
-        self._save_scene("02_post_validacion")
+        self._save_scene("06_post_validacion")
+        self.tomar_screenshot("06_validacion_medica")
 
-        self._checkpoint_step(self.STEP_EXPORT_NIFTI, "Exportando phantom a NIfTI",
-                              self._export_nifti)
+        # Post-validacion: aqui se agregaran los pasos de MCNP (Modulo 2)
+        # pendientes: phantom desde segmentacion, fuente desde PET,
+        #            geometria voxelizada, tallies, escritura .i
+        logger.info("")
+        logger.info("  ╔════════════════════════════════════════════════════╗")
+        logger.info("  ║   PIPELINE COMPLETO (hasta validacion medica)    ║")
+        logger.info("  ║                                                  ║")
+        logger.info("  ║   Proximos pasos (Modulo 2 - MCNP):             ║")
+        logger.info("  ║     1. Phantom desde segmentacion               ║")
+        logger.info("  ║     2. Fuente desde PET                         ║")
+        logger.info("  ║     3. Geometria voxelizada                     ║")
+        logger.info("  ║     4. Tallies (detectores)                     ║")
+        logger.info("  ║     5. Escritura archivo .i                     ║")
+        logger.info("  ╚════════════════════════════════════════════════════╝")
+        logger.info("")
 
-        self._checkpoint_step(self.STEP_GENERATE_MCNP, "Generando entrada MCNP (Modulo 2)",
-                              self._generate_mcnp)
-
-        # Screenshot final
-        self.tomar_screenshot("resultado_final")
-
-        self._log_consola("Pipeline completado. Generando reporte...")
+        self._log_consola("Pipeline completado hasta validacion medica. Generando reporte...")
         ok = self._report()
         if ok:
-            self._log_consola("Pipeline finalizado EXITOSAMENTE")
+            self._log_consola("Pipeline finalizado EXITOSAMENTE (hasta validacion)")
             git_commit.prompt_git_commit(self.data_dir)
         else:
             self._log_consola("Pipeline finalizado con ERRORES. Revise el reporte.")
@@ -248,13 +280,28 @@ class PipelineTestOrchestrator:
     # CHECKPOINT STEP
     # ==================================================================
 
-    def _checkpoint_step(self, step_name, display_name, func):
+    def _checkpoint_step(self, step_name, display_name, func, data_func=None):
+        """Ejecuta un paso del pipeline con checkpoint.
+
+        Si el paso ya esta completado segun checkpoint, salta.
+        Si falla, registra el error y retorna False.
+
+        Args:
+            step_name: Nombre del paso (clave en checkpoint)
+            display_name: Nombre visible en logs
+            func: Funcion a ejecutar
+            data_func: Funcion que retorna dict con datos a persistir (para BD futura)
+        """
         if self.checkpoint.is_completed(step_name):
             logger.info(f"  [{'...'}]: ya completado (checkpoint salta)")
             self.results["pasos"].append({
                 "nombre": display_name, "ok": True, "tiempo": 0, "checkpoint": True
             })
             self._log_consola(f"[checkpoint] {display_name} — ya completado, saltando")
+            # Restaurar estado desde checkpoint si hay datos
+            cp_data = self.checkpoint.get_data(step_name)
+            if cp_data:
+                self._restore_step_state(step_name, cp_data)
             return True
 
         logger.info(f"[{len(self.results['pasos'])+1}] {display_name}...")
@@ -270,7 +317,9 @@ class PipelineTestOrchestrator:
                 "nombre": display_name, "ok": True, "tiempo": elapsed
             })
             self.results["tiempos"][display_name] = elapsed
-            self.checkpoint.mark_completed(step_name)
+            # Guardar datos del paso si hay funcion extractora
+            data = data_func() if data_func else {}
+            self.checkpoint.mark_completed(step_name, data=data)
             show_progress(f"{display_name} completado")
             self._log_consola_ok(f"{display_name} — {elapsed:.1f}s")
             return True
@@ -285,14 +334,54 @@ class PipelineTestOrchestrator:
             self._log_consola_error(f"{display_name} — FALLO: {e}")
             return False
 
+    def _restore_step_state(self, step_name, data: dict):
+        """Restaura atributos del pipeline desde checkpoint data.
+        Fundamental para que al retomar desde checkpoint los nodos Slicer
+        sigan siendo accesibles.
+        """
+        if not data:
+            return
+        # Mapear datos guardados a atributos del orquestador
+        restore_map = {
+            "ct_node": "ct_node",
+            "pet_node": "pet_node",
+            "segmentation_node": "segmentation_node",
+            "phantom_nifti_path": "phantom_nifti_path",
+            "mcnp_path": "mcnp_path",
+            "ct_node_name": "ct_node_name",
+            "pet_node_name": "pet_node_name",
+        }
+        for data_key, attr_name in restore_map.items():
+            if data_key in data and data[data_key] is not None:
+                # Si es un nombre de nodo, buscar en escena Slicer
+                if data_key.endswith("_name"):
+                    import slicer
+                    try:
+                        node = slicer.util.getNode(data[data_key])
+                        # Mapear ct_node_name -> ct_node
+                        actual_attr = data_key.replace("_name", "_node")
+                        if hasattr(self, actual_attr):
+                            setattr(self, actual_attr, node)
+                    except Exception:
+                        setattr(self, attr_name, data[data_key])
+                else:
+                    setattr(self, attr_name, data[data_key])
+
     # ==================================================================
     # PASOS
     # ==================================================================
 
+    def _slicer_version(self) -> str:
+        try:
+            import slicer
+            return f"{slicer.app.majorVersion}.{slicer.app.minorVersion}"
+        except ImportError:
+            return "desconocido"
+
     def _check_slicer(self):
         try:
             import slicer
-            logger.info(f"  Slicer version: {slicer.app.majorVersion}.{slicer.app.minorVersion}")
+            logger.info(f"  Slicer version: {self._slicer_version()}")
             self._mcp_start()
         except ImportError:
             raise RuntimeError("No se detecta 3D Slicer. Ejecutar dentro de Slicer.")
@@ -302,12 +391,11 @@ class PipelineTestOrchestrator:
     # ==================================================================
 
     def _mcp_start(self):
-        """Inicia el servidor MCP dentro de Slicer.
+        """Inicia el servidor MCP local si existe.
 
-        Permite que scripts externos (PanelIA, etc.) se conecten
-        y monitoreen el progreso del pipeline en tiempo real.
+        Solo usa archivo local (slicer-mcp-server.py en el mismo directorio).
+        Sin descargas de GitHub ni exec de codigo remoto.
         """
-        import threading
         import slicer
 
         mcp_script = os.path.join(
@@ -315,7 +403,6 @@ class PipelineTestOrchestrator:
             "slicer-mcp-server.py"
         )
 
-        # Opcion 1: archivo local
         if os.path.exists(mcp_script):
             logger.info(f"  Iniciando MCP server desde: {mcp_script}")
             try:
@@ -323,24 +410,11 @@ class PipelineTestOrchestrator:
                     code = f.read()
                 exec(compile(code, mcp_script, 'exec'),
                      {"__name__": "__mcp_server__", "slicer": slicer})
-                logger.info("  MCP server listo en puerto 2026")
-                return
+                logger.info("  MCP server listo")
             except Exception as e:
                 logger.warning(f"  No se pudo iniciar MCP local: {e}")
-
-        # Opcion 2: descargar de GitHub
-        logger.info("  Descargando slicer-mcp-server.py de GitHub...")
-        try:
-            import urllib.request
-            url = ("https://raw.githubusercontent.com/pieper/"
-                   "slicer-skill/main/slicer-mcp-server.py")
-            resp = urllib.request.urlopen(url, timeout=10)
-            code = resp.read().decode("utf-8")
-            exec(compile(code, "slicer-mcp-server.py", 'exec'),
-                 {"__name__": "__mcp_server__", "slicer": slicer})
-            logger.info("  MCP server listo (descargado de GitHub)")
-        except Exception as e:
-            logger.warning(f"  MCP server no iniciado (no es critico): {e}")
+        else:
+            logger.info("  MCP server no disponible (slicer-mcp-server.py no encontrado)")
             logger.info("  El pipeline seguira funcionando sin MCP externo.")
 
     # ==================================================================
@@ -599,27 +673,90 @@ class PipelineTestOrchestrator:
         couch_remover.remove_couch_and_air(self.ct_node)
 
     def _segment(self):
+        if self.segmenter == "totalsegmentator":
+            # Pasar el NOMBRE del nodo CT en la escena (ej: "3Dosim_CT_anon")
+            ct_input = self.ct_node.GetName() if self.ct_node else None
+        else:
+            # Simple mode: pasar el objeto nodo directamente
+            ct_input = self.ct_node
+
         seg_node = segmentation.run_segmentation(
-            self.ct_node, self.output_dir, mode=self.segmenter
+            ct_input, self.output_dir, mode=self.segmenter,
+            force_cpu=self.force_cpu,
         )
         self.segmentation_node = seg_node
 
     def _do_validation(self):
         validation.validate_segmentation()
 
-    def _export_nifti(self):
-        logger.info("  Export NIfTI: saltado (no necesario para Mod 2)")
-        self.phantom_nifti_path = None
-
-    def _generate_mcnp(self):
-        mcnp_path = mcnp_builder.generate_mcnp_input(self.ct_node, self.output_dir, self.data_dir)
-        self.mcnp_path = mcnp_path
+    def _placeholder_mcnp_steps(self):
+        """Placeholder para futuros pasos de MCNP.
+        Se implementaran: phantom, source, geometry, tallies, writer.
+        """
+        logger.info("  Pasos MCNP: pendientes de implementacion")
+        logger.info("  Pipeline completo hasta validacion medica.")
 
     # ==================================================================
     # REPORTE
     # ==================================================================
 
+    def _save_results_json(self):
+        """Guarda un archivo results.json con el resumen completo del pipeline.
+        
+        Este archivo sirve como registro persistente para la futura base de datos.
+        """
+        import json
+        from datetime import datetime
+
+        results_file = os.path.join(self.output_dir, "pipeline_results.json")
+        
+        # Cargar historial existente si lo hay
+        historial = []
+        if os.path.exists(results_file):
+            try:
+                with open(results_file, "r") as f:
+                    historial = json.load(f)
+                    if not isinstance(historial, list):
+                        historial = [historial]
+            except (json.JSONDecodeError, Exception):
+                historial = []
+
+        # Crear registro de esta ejecucion
+        total = len(self.results["pasos"])
+        ok_count = sum(1 for p in self.results["pasos"] if p["ok"])
+        fails = total - ok_count
+
+        registro = {
+            "fecha": datetime.now().isoformat(),
+            "data_dir": self.data_dir,
+            "output_dir": self.output_dir,
+            "segmenter": self.segmenter,
+            "force_cpu": self.force_cpu,
+            "total_pasos": total,
+            "exitosos": ok_count,
+            "fallos": fails,
+            "resultado": "OK" if fails == 0 else "ERROR",
+            "pasos": self.results["pasos"],
+            "errores": self.results["errores"],
+            "screenshots": self.screenshots,
+            # Datos clave recuperados del checkpoint para BD
+            "checkpoint_data": self.checkpoint.state.get("data", {}),
+        }
+
+        historial.append(registro)
+        
+        with open(results_file, "w") as f:
+            json.dump(historial, f, indent=2, default=str)
+        
+        logger.info(f"  Resultados guardados en: {results_file}")
+
     def _report(self) -> bool:
+        # Guardar resultados JSON antes del reporte (para BD futura)
+        try:
+            self._save_results_json()
+        except Exception as e:
+            logger.warning(f"  No se pudo guardar results.json: {e}")
+
         logger.info("")
         logger.info("=" * 70)
         logger.info(" REPORTE FINAL DEL PIPELINE 3Dosim")

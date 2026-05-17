@@ -1,11 +1,13 @@
 """
 Validacion medica obligatoria de la segmentacion.
 
-Muestra un dialogo modal Qt que requiere aprobacion explicita
-de un medico antes de continuar con los calculos dosimetricos.
+Muestra un dialogo Qt NO MODAL que permite al medico navegar Slicer
+libremente (mover slices, ocultar PET, rotar 3D) mientras revisa.
+Solo cuando hace clic en APROBAR o RECHAZAR se continua.
 """
 
 import logging
+import time
 
 logger = logging.getLogger("3DosimTest")
 
@@ -16,8 +18,9 @@ def validate_segmentation():
     """
     VALIDACION MEDICA OBLIGATORIA.
 
-    Muestra un dialogo modal con botones SI/NO.
-    NO se puede continuar sin aprobacion medica explicita.
+    Dialogo NO modal: el medico puede usar 3D Slicer para navegar
+    las imagenes, ocultar PET, examinar la segmentacion en 3D, etc.
+    Solo cuando hace clic en APROBAR o RECHAZAR se continua.
 
     Raises:
         RuntimeError: Si el medico rechaza la segmentacion
@@ -60,65 +63,90 @@ def validate_segmentation():
 
 def _show_validation_dialog() -> bool:
     """
-    Muestra el dialogo de validacion.
-    Primero intenta con Qt (Slicer), fallback a consola.
+    Muestra dialogo NO MODAL. El medico puede usar Slicer libremente.
+
+    Returns:
+        True si el medico aprueba, False si rechaza.
     """
     try:
-        from qt import QLabel, QVBoxLayout, QDialog, QPushButton
+        from qt import QLabel, QVBoxLayout, QDialog, QPushButton, Qt
+        import slicer
 
-        dialog = QDialog()
-        dialog.setWindowTitle("3Dosim - Validacion Medica Obligatoria")
-        dialog.setMinimumWidth(500)
-        dialog.setModal(True)
+        app = slicer.app
+
+        dialog = QDialog(slicer.util.mainWindow())
+        dialog.setWindowTitle("3Dosim - Validacion Medica")
+        dialog.setMinimumWidth(600)
+        dialog.setModal(False)  # ★ CLAVE: NO MODAL - medico usa Slicer
+        # Mantener sobre otras ventanas pero sin bloquear
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
 
         layout = QVBoxLayout()
+        layout.setSpacing(20)
 
-        msg = QLabel(
-            "VALIDACION MEDICA REQUERIDA\n\n"
-            "La segmentacion anatomica se ha completado.\n\n"
-            "Un medico especialista DEBE revisar y aprobar\n"
-            "la segmentacion antes de continuar con:\n"
-            "  - Generacion de entrada MCNP\n"
-            "  - Calculo de dosis\n"
-            "  - Analisis dosimetrico\n\n"
-            "La segmentacion es correcta y puede continuar?"
+        titulo = QLabel(
+            '<h2 style="color:#2c3e50; text-align:center;">Validar Segmentacion</h2>'
+            '<hr>'
+            '<p style="font-size:16px; text-align:center;">'
+            '&iquest;La segmentacion es correcta?</p>'
         )
-        msg.setWordWrap(True)
-        layout.addWidget(msg)
+        titulo.setWordWrap(True)
+        layout.addWidget(titulo)
 
-        btn_yes = QPushButton("SI, aprobado - Continuar")
-        btn_no = QPushButton("NO, rechazado - Detener pipeline")
+        layout.addSpacing(10)
 
-        layout.addSpacing(20)
+        btn_yes = QPushButton("APROBAR")
+        btn_no = QPushButton("RECHAZAR")
+
         layout.addWidget(btn_yes)
         layout.addWidget(btn_no)
 
         dialog.setLayout(layout)
 
-        result = [False]
+        btn_yes.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #27ae60; color: white; font-weight: bold;"
+            "  padding: 16px; font-size: 15px; border-radius: 6px; min-height: 20px;"
+            "}"
+            "QPushButton:hover { background-color: #2ecc71; }"
+        )
+        btn_no.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #c0392b; color: white; font-weight: bold;"
+            "  padding: 16px; font-size: 15px; border-radius: 6px; min-height: 20px;"
+            "}"
+            "QPushButton:hover { background-color: #e74c3c; }"
+        )
+
+        resultado = [None]
 
         def on_yes():
-            result[0] = True
-            dialog.accept()
+            resultado[0] = True
+            dialog.close()
 
         def on_no():
-            result[0] = False
-            dialog.reject()
+            resultado[0] = False
+            dialog.close()
+
+        def on_dialog_closed(exit_code):
+            if resultado[0] is None:
+                resultado[0] = False
 
         btn_yes.clicked.connect(on_yes)
         btn_no.clicked.connect(on_no)
+        dialog.finished.connect(on_dialog_closed)
 
-        btn_yes.setStyleSheet(
-            "background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;"
-        )
-        btn_no.setStyleSheet(
-            "background-color: #f44336; color: white; font-weight: bold; padding: 10px;"
-        )
+        logger.info("  Dialogo NO modal abierto — el medico navega Slicer libremente")
+        logger.info("  Haga clic en APROBAR o RECHAZAR para continuar")
 
-        logger.info("  Esperando validacion del medico...")
-        dialog.exec_()
+        dialog.show()
 
-        return result[0]
+        # Loop no bloqueante: procesa eventos Qt, Slicer sigue respondiendo
+        while resultado[0] is None:
+            app.processEvents()
+            time.sleep(0.05)
+
+        return resultado[0]
 
     except ImportError:
         # Fallback a consola
