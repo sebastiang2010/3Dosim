@@ -16,24 +16,27 @@
 ## SlicerDosim - Estructura compartimentada (3DSlicerModule)
 
 ```
-SlicerDosimLib/
-├── __init__.py                  # Exporta todas las clases publicas
-├── config.py                    # [NUEVO] TissueConfig - carga tissue_config.json
-├── phantom_segmentation.py     # [MODIFICADO] Usa TissueConfig en vez de hardcodes
-├── segmentation.py             # Sin cambios
-├── registration.py             # Sin cambios
-├── mcnp_generator.py           # [MODIFICADO] Orquestador, delega a sub-modulos
-├── mcnp_materials.py           # [NUEVO] Indice phantom -> material MCNP
-├── mcnp_geometry.py            # [NUEVO] LIKE n BUT, RPP, lattice fill
-├── mcnp_source.py              # [NUEVO] SDEF desde PET
-├── mcnp_tallies.py             # [NUEVO] FMESH4, F6, modo, NPS
-├── dosimetry.py                # [MODIFICADO] Usa MCTALParser
-├── mctal_parser.py             # [NUEVO] Parseo de output MCNP
-├── dvh_analysis.py             # Sin cambios
-└── utils.py                    # Sin cambios
-
-Resources/Config/
-└── tissue_config.json          # [NUEVO] Config unica de tejidos/materiales
+Modules/Scripted/SlicerDosim/
+├── SlicerDosimLib/
+│   ├── __init__.py              # Exporta todas las clases publicas
+│   ├── config.py                # [NUEVO] TissueConfig - carga tissue_config.json
+│   ├── phantom_segmentation.py  # [MODIFICADO] Usa TissueConfig en vez de hardcodes
+│   ├── segmentation.py          # Sin cambios
+│   ├── registration.py          # Sin cambios
+│   ├── mcnp_generator.py        # [MODIFICADO] Orquestador, delega a sub-modulos
+│   ├── mcnp_materials.py        # [NUEVO] Indice phantom -> material MCNP
+│   ├── mcnp_geometry.py         # [NUEVO] LIKE n BUT, RPP, lattice fill
+│   ├── mcnp_source.py           # [NUEVO] SDEF desde PET
+│   ├── mcnp_tallies.py          # [NUEVO] FMESH4, F6, modo, NPS
+│   ├── dosimetry.py             # [MODIFICADO] Usa MCTALParser
+│   ├── mctal_parser.py          # [NUEVO] Parseo de output MCNP
+│   ├── dvh_analysis.py          # Sin cambios
+│   └── utils.py                 # Sin cambios
+├── Resources/
+│   └── Config/
+│       └── tissue_config.json   # [NUEVO] Config unica de tejidos/materiales
+└── Testing/
+    └── PipelineOrchestrator/    # (ver abajo)
 ```
 
 ## Modulos de Slicer (entradas separadas en dropdown 3Dosim)
@@ -125,7 +128,7 @@ Y los modulos de Slicer (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) lo impor
 | **Entry legacy** | `3DSlicerModule/SlicerDosim/Testing/Python/test_pipeline_orchestrator.py` |
 | **Directorio raiz** | `C:\programas\3Dosim\3Dosim_v_3.14` |
 | **Repo git** | En el directorio raiz |
-| **Modulos Slicer** | `Modules/Scripted/` (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) |
+| **Modulos Slicer** | `3DSlicerModule/SlicerDosim/Modules/Scripted/` (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) |
 
 ### Comando para ejecutar el pipeline
 ```bash
@@ -133,6 +136,29 @@ Y los modulos de Slicer (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) lo impor
 ```
 
 ### Para reiniciar checkpoints
+```bash
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --reset
+```
+
+## Sesion 16-May 19:10 — Checkpoint
+
+### Que se hizo
+1. **pipeline.py**: show_fusion movido DESPUES de remove_couch_air (CT sin camilla). CT W/L fijo 400/40. PET W/L 40/20 basado en datos reales. Pipeline se detiene si segmentation o validacion fallan.
+2. **segmentation.py**: ELIMINADO threading (TotalSegmentator usa multiprocessing y crashea en threads). ELIMINADO phantom sintetico + dialogo quick/full. TS corre en MAIN thread con barra indeterminada antes/despues. MsgBox avisa que Slicer se congelara 5-15 min. Parametros: device="cpu", fast=True, body_seg=True.
+3. **mcp_server.py**: NUEVO - servidor MCP TCP raw en puerto 2026. Acepta comandos JSON (ping, status, codigo Python). Funcion take_screenshot().
+4. **git_commit.py + pipeline.py**: Fix tipo `str | None` -> `"str | None"` para Python 3.9.
+
+### Error conocido
+- `'bool' object is not callable` en TotalSegmentator cuando se ejecuta en hilo (threading + multiprocessing incompatible). Solucion: main thread.
+
+### Lo que falta (proxima sesion)
+1. Ejecutar pipeline con `--reset` y verificar que TS funciona en main thread
+2. Verificar fusion CT+PET (Rainbow colormap, W/L correcto)
+3. Verificar MCP server responde en puerto 2026
+4. Verificar screenshots se guardan en output_dir/screenshots/
+5. Pipeline completo hasta Modulo 2 MCNP
+
+### Comando
 ```bash
 & "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --reset
 ```

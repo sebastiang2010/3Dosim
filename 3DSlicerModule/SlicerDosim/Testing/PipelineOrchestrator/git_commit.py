@@ -12,7 +12,7 @@ import subprocess
 logger = logging.getLogger("3DosimTest")
 
 
-def find_git_repo(start_path: str = None) -> str | None:
+def find_git_repo(start_path: str = None) -> "str | None":
     """
     Busca el directorio raiz del repositorio git desde start_path hacia arriba.
 
@@ -94,7 +94,7 @@ def prompt_git_commit(data_dir: str = None):
         logger.warning(f"  Error inesperado en git: {e}")
 
 
-def _ask_for_commit(data_dir: str = None) -> str | None:
+def _ask_for_commit(data_dir: str = None) -> "str | None":
     """
     Pregunta al usuario si quiere hacer commit.
     Returns: Mensaje de commit, o None si cancelo.

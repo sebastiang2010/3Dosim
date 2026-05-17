@@ -37,11 +37,27 @@ def main():
         action="store_true",
         help="Reiniciar checkpoints (ignora estado guardado)",
     )
+    parser.add_argument(
+        "--mcp-port",
+        type=int,
+        default=0,
+        help="Puerto para el servidor MCP (default: 0 = deshabilitado)",
+    )
+    parser.add_argument(
+        "--no-consola",
+        action="store_true",
+        help="Deshabilita la consola interactiva de comandos",
+    )
     args, _ = parser.parse_known_args()
 
     from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
 
-    orchestrator = PipelineTestOrchestrator(args.data_dir, reset=args.reset)
+    orchestrator = PipelineTestOrchestrator(
+        args.data_dir,
+        reset=args.reset,
+        mcp_port=args.mcp_port,
+        no_consola=args.no_consola,
+    )
     orchestrator.run()
 
 

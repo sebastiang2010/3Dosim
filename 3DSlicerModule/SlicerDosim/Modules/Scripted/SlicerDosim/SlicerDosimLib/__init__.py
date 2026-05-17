@@ -14,3 +14,6 @@ from .mcnp_geometry import MCNPGeometryBuilder
 from .mcnp_source import MCNPSourceBuilder
 from .mcnp_tallies import MCNPTallyBuilder
 from .mctal_parser import MCTALParser
+
+# Orquestador IA + MCP
+from .orchestrator import AgenteState, MCPClient, PanelIA

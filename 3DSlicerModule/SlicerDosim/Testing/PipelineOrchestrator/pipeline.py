@@ -15,6 +15,8 @@ from PipelineOrchestrator import validation
 from PipelineOrchestrator import mcnp_builder
 from PipelineOrchestrator import git_commit
 from PipelineOrchestrator.utils import logger, add_module_path, show_progress
+from PipelineOrchestrator.mcp_helper import MCP
+from PipelineOrchestrator.comandos import ConsolaComandos
 
 logger = logging.getLogger("3DosimTest")
 
@@ -27,6 +29,7 @@ class PipelineTestOrchestrator:
 
     STEP_CHECK_SLICER  = "check_slicer"
     STEP_LOAD_DICOM    = "load_dicom"
+    STEP_SHOW_FUSION   = "show_fusion"
     STEP_ANONYMIZE     = "anonymize"
     STEP_REMOVE_COUCH  = "remove_couch_air"
     STEP_SEGMENT       = "segment_phantom"
@@ -34,7 +37,8 @@ class PipelineTestOrchestrator:
     STEP_EXPORT_NIFTI  = "export_nifti"
     STEP_GENERATE_MCNP = "generate_mcnp"
 
-    def __init__(self, data_dir: str, reset: bool = False):
+    def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
+                 no_consola: bool = False):
         self.data_dir = data_dir
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
@@ -54,6 +58,22 @@ class PipelineTestOrchestrator:
         self.phantom_nifti_path = None
         self.mcnp_path = None
 
+        # MCP: servidor para que externos monitoreen + screenshots
+        self.mcp = MCP()
+        self.mcp_server = None
+        self.mcp_port = mcp_port
+        self.screenshots = []
+
+        # Consola interactiva de comandos
+        self.no_consola = no_consola
+        self.consola = None
+        if not no_consola:
+            try:
+                self.consola = ConsolaComandos(output_dir=self.output_dir)
+            except Exception as e:
+                logger.debug(f"Consola no disponible: {e}")
+                self.consola = None
+
         logger.info("=" * 60)
         logger.info(" 3Dosim Pipeline Orchestrator v3.14")
         logger.info("=" * 60)
@@ -72,24 +92,68 @@ class PipelineTestOrchestrator:
         logger.info("INICIANDO PIPELINE")
         logger.info("")
 
+        # Mostrar consola interactiva
+        if self.consola:
+            self.consola.log("=" * 50)
+            self.consola.log(" 3Dosim Pipeline v3.14 - Consola de Comandos")
+            self.consola.log(" Escribi 'ayuda' para comandos disponibles")
+            self.consola.log("=" * 50)
+            self.consola.log("")
+            self.consola.mostrar()
+
+        self._log_consola("Iniciando pipeline...")
+
         if self._checkpoint_step(self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
                                  self._check_slicer):
             add_module_path()
 
-        self._checkpoint_step(self.STEP_LOAD_DICOM, "Cargando imagenes DICOM",
-                              self._load_dicom)
+        if not self._checkpoint_step(self.STEP_LOAD_DICOM, "Cargando imagenes DICOM",
+                                     self._load_dicom):
+            logger.error("Fallo critico en carga DICOM. Abortando.")
+            self._report()
+            return
 
-        self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
-                              self._anonymize)
+        if not self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
+                                     self._remove_couch_air):
+            logger.warning("No se pudo eliminar camilla, continuando...")
 
-        self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
-                              self._remove_couch_air)
+        if not self._checkpoint_step(self.STEP_SHOW_FUSION, "Mostrando fusion CT+PET",
+                                     self._show_fusion):
+            logger.warning("No se pudo mostrar fusion, continuando de todos modos")
 
-        self._checkpoint_step(self.STEP_SEGMENT, "Segmentando (TotalSegmentator)",
-                              self._segment)
+        # Screenshot de la fusion
+        if self.ct_node:
+            self.tomar_screenshot("fusion")
 
-        self._checkpoint_step(self.STEP_VALIDATE, "Validacion medica de la segmentacion",
-                              self._do_validation)
+        if not self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
+                                     self._anonymize):
+            logger.warning("Anonimizacion fallo, continuando...")
+
+        # --- PASO CRITICO: SEGMENTACION ---
+        self._log_consola("Iniciando segmentacion con TotalSegmentator (5-15 min)")
+        seg_ok = self._checkpoint_step(self.STEP_SEGMENT, "Segmentando (TotalSegmentator)",
+                                       self._segment)
+        if not seg_ok:
+            logger.error("")
+            logger.error("=" * 60)
+            logger.error(" SEGMENTACION FALLIDA. El pipeline no puede continuar.")
+            logger.error(" Revise el error anterior, corrija y ejecute con --reset.")
+            logger.error("=" * 60)
+            self._log_consola("ERROR: Segmentacion fallida. Pipeline detenido.")
+            self._report()
+            return
+
+        # Screenshot de la segmentacion
+        self.tomar_screenshot("segmentacion")
+
+        # --- PASO CRITICO: VALIDACION MEDICA ---
+        self._log_consola("Esperando validacion medica de la segmentacion...")
+        if not self._checkpoint_step(self.STEP_VALIDATE, "Validacion medica de la segmentacion",
+                                     self._do_validation):
+            logger.error("Validacion medica rechazada. Pipeline detenido.")
+            self._log_consola("Validacion medica RECHAZADA. Pipeline detenido.")
+            self._report()
+            return
 
         self._checkpoint_step(self.STEP_EXPORT_NIFTI, "Exportando phantom a NIfTI",
                               self._export_nifti)
@@ -97,9 +161,16 @@ class PipelineTestOrchestrator:
         self._checkpoint_step(self.STEP_GENERATE_MCNP, "Generando entrada MCNP (Modulo 2)",
                               self._generate_mcnp)
 
+        # Screenshot final
+        self.tomar_screenshot("resultado_final")
+
+        self._log_consola("Pipeline completado. Generando reporte...")
         ok = self._report()
         if ok:
+            self._log_consola("Pipeline finalizado EXITOSAMENTE")
             git_commit.prompt_git_commit(self.data_dir)
+        else:
+            self._log_consola("Pipeline finalizado con ERRORES. Revise el reporte.")
 
     # ==================================================================
     # CHECKPOINT STEP
@@ -111,10 +182,12 @@ class PipelineTestOrchestrator:
             self.results["pasos"].append({
                 "nombre": display_name, "ok": True, "tiempo": 0, "checkpoint": True
             })
+            self._log_consola(f"[checkpoint] {display_name} — ya completado, saltando")
             return True
 
         logger.info(f"[{len(self.results['pasos'])+1}] {display_name}...")
         show_progress(f"Ejecutando: {display_name}")
+        self._log_consola(f"Ejecutando: {display_name}...")
 
         t0 = time.time()
         try:
@@ -127,6 +200,7 @@ class PipelineTestOrchestrator:
             self.results["tiempos"][display_name] = elapsed
             self.checkpoint.mark_completed(step_name)
             show_progress(f"{display_name} completado")
+            self._log_consola_ok(f"{display_name} — {elapsed:.1f}s")
             return True
         except Exception as e:
             elapsed = time.time() - t0
@@ -136,6 +210,7 @@ class PipelineTestOrchestrator:
             })
             self.results["errores"].append(f"{display_name}: {e}")
             show_progress(f"FALLO: {display_name}")
+            self._log_consola_error(f"{display_name} — FALLO: {e}")
             return False
 
     # ==================================================================
@@ -146,8 +221,133 @@ class PipelineTestOrchestrator:
         try:
             import slicer
             logger.info(f"  Slicer version: {slicer.app.majorVersion}.{slicer.app.minorVersion}")
+            self._mcp_start()
         except ImportError:
             raise RuntimeError("No se detecta 3D Slicer. Ejecutar dentro de Slicer.")
+
+    # ==================================================================
+    # MCP: servidor + screenshots
+    # ==================================================================
+
+    def _mcp_start(self):
+        """Inicia el servidor MCP dentro de Slicer.
+
+        Permite que scripts externos (PanelIA, etc.) se conecten
+        y monitoreen el progreso del pipeline en tiempo real.
+        """
+        import threading
+        import slicer
+
+        mcp_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "slicer-mcp-server.py"
+        )
+
+        # Opcion 1: archivo local
+        if os.path.exists(mcp_script):
+            logger.info(f"  Iniciando MCP server desde: {mcp_script}")
+            try:
+                with open(mcp_script) as f:
+                    code = f.read()
+                exec(compile(code, mcp_script, 'exec'),
+                     {"__name__": "__mcp_server__", "slicer": slicer})
+                logger.info("  MCP server listo en puerto 2026")
+                return
+            except Exception as e:
+                logger.warning(f"  No se pudo iniciar MCP local: {e}")
+
+        # Opcion 2: descargar de GitHub
+        logger.info("  Descargando slicer-mcp-server.py de GitHub...")
+        try:
+            import urllib.request
+            url = ("https://raw.githubusercontent.com/pieper/"
+                   "slicer-skill/main/slicer-mcp-server.py")
+            resp = urllib.request.urlopen(url, timeout=10)
+            code = resp.read().decode("utf-8")
+            exec(compile(code, "slicer-mcp-server.py", 'exec'),
+                 {"__name__": "__mcp_server__", "slicer": slicer})
+            logger.info("  MCP server listo (descargado de GitHub)")
+        except Exception as e:
+            logger.warning(f"  MCP server no iniciado (no es critico): {e}")
+            logger.info("  El pipeline seguira funcionando sin MCP externo.")
+
+    # ==================================================================
+    # CONSOLA INTERACTIVA
+    # ==================================================================
+
+    def _log_consola(self, mensaje: str):
+        """Envia un mensaje a la consola interactiva (si existe)."""
+        if self.consola:
+            self.consola.log(mensaje)
+
+    def _log_consola_ok(self, mensaje: str):
+        """Envia un mensaje de exito a la consola."""
+        if self.consola:
+            self.consola.log_ok(mensaje)
+
+    def _log_consola_error(self, mensaje: str):
+        """Envia un mensaje de error a la consola."""
+        if self.consola:
+            self.consola.log_error(mensaje)
+
+    def tomar_screenshot(self, nombre: str, view: str = "3D") -> "str | None":
+        """Guarda un screenshot de la vista actual de Slicer.
+
+        Args:
+            nombre: Nombre identificador (ej: 'fusion', 'segmentacion')
+            view: Vista a capturar ("3D", "Red", "Yellow", "Green", "all")
+
+        Returns:
+            Ruta al archivo PNG, o None si falla.
+        """
+        try:
+            import slicer
+            from datetime import datetime
+
+            # Armar nombre de archivo
+            ts = datetime.now().strftime("%H%M%S")
+            filename = f"{ts}_{nombre}.png"
+            filepath = os.path.join(self.output_dir, "screenshots", filename)
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+            # Mapear vista
+            view_map = {
+                "3D": "vtkMRMLViewNode",
+                "Red": "vtkMRMLSliceNode",
+                "Yellow": "vtkMRMLSliceNode",
+                "Green": "vtkMRMLSliceNode",
+            }
+
+            # Obtener el layout manager
+            lm = slicer.app.layoutManager()
+            if not lm:
+                logger.warning(f"  No se puede tomar screenshot: sin layout manager")
+                return None
+
+            # Obtener el widget de la vista
+            view_widget = None
+            if view == "3D":
+                view_widget = lm.threeDWidget(0).threeDView()
+            elif view in ("Red", "Yellow", "Green"):
+                view_widget = lm.sliceWidget(view.upper()).sliceView()
+
+            if not view_widget:
+                logger.warning(f"  Vista '{view}' no disponible para screenshot")
+                return None
+
+            # Capturar usando Qt widget.grab() (funciona en Slicer 5.x)
+            pixmap = view_widget.grab()
+            pixmap.save(filepath)
+
+            self.screenshots.append(filepath)
+            logger.info(f"  Screenshot: {os.path.basename(filepath)}")
+            self._log_consola_ok(f"Screenshot: {nombre} ({os.path.basename(filepath)})")
+            return filepath
+
+        except Exception as e:
+            logger.warning(f"  No se pudo tomar screenshot '{nombre}': {e}")
+            self._log_consola_error(f"Screenshot fallo: {nombre} — {e}")
+            return None
 
     def _load_dicom(self):
         import slicer
@@ -225,6 +425,64 @@ class PipelineTestOrchestrator:
         logger.info(f"  CT dimensiones: {dims[0]}x{dims[1]}x{dims[2]}")
         logger.info(f"  CT espaciado: {spacing[0]:.3f}x{spacing[1]:.3f}x{spacing[2]:.3f} mm")
 
+    def _show_fusion(self):
+        import slicer
+        logger.info("  Configurando vista de fusion CT+PET...")
+
+        # Forzar layout a vistas convencionales (axial/sagital/coronal + 3D)
+        lm = slicer.app.layoutManager()
+        lm.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutConventionalView)
+
+        # Asegurar display nodes para CT y PET
+        ct_dn = self.ct_node.GetDisplayNode()
+        if not ct_dn:
+            from slicer import vtkMRMLScalarVolumeDisplayNode
+            ct_dn = vtkMRMLScalarVolumeDisplayNode()
+            slicer.mrmlScene.AddNode(ct_dn)
+            ct_dn.SetDefaultColorMap()
+            self.ct_node.SetAndObserveDisplayNodeID(ct_dn.GetID())
+
+        # Configurar fusion
+        if not self.pet_node:
+            logger.info("  PET no disponible, mostrando solo CT")
+            slicer.util.setSliceViewerLayers(background=self.ct_node)
+        else:
+            logger.info("  Aplicando colormap Rainbow al PET...")
+            # Asegurar display node para PET
+            pet_dn = self.pet_node.GetDisplayNode()
+            if not pet_dn:
+                from slicer import vtkMRMLScalarVolumeDisplayNode
+                pet_dn = vtkMRMLScalarVolumeDisplayNode()
+                slicer.mrmlScene.AddNode(pet_dn)
+                pet_dn.SetDefaultColorMap()
+                self.pet_node.SetAndObserveDisplayNodeID(pet_dn.GetID())
+
+            # Configurar PET con colormap Rainbow
+            pet_dn.SetAndObserveColorNodeID("vtkMRMLColorTableNodeRainbow")
+            # Window/level PET basado en datos reales (p5-p95 voxels activos)
+            pet_dn.AutoWindowLevelOff()
+            pet_dn.SetWindowLevel(40.0, 20.0)
+
+            # Mostrar fusion
+            slicer.util.setSliceViewerLayers(
+                background=self.ct_node,
+                foreground=self.pet_node,
+                foregroundOpacity=0.35
+            )
+
+            # CT: window/level fijo para abdomen (ya sin camilla)
+            ct_dn.AutoWindowLevelOff()
+            ct_dn.SetWindowLevel(400.0, 40.0)
+
+            logger.info("  Fusion CT+PET lista en vistas axial/sagital/coronal")
+            logger.info("  PET: Rainbow colormap, opacidad 35%")
+            logger.info("  CT: window/level ajustado para fusion")
+
+        # Forzar refresco de vistas
+        slicer.app.processEvents()
+        slicer.util.resetSliceViews()
+        slicer.app.processEvents()
+
     def _anonymize(self):
         anonymize.anonymize(self.ct_node, self.ct_dir, self.pet_dir, self.anon_dir, self.pet_node)
 
@@ -288,6 +546,10 @@ class PipelineTestOrchestrator:
             logger.info(f"  Phantom NIfTI:  {self.phantom_nifti_path}")
         if self.mcnp_path:
             logger.info(f"  MCNP input:     {self.mcnp_path}")
+        if self.screenshots:
+            logger.info(f"  Screenshots:     {len(self.screenshots)} archivos")
+            for s in self.screenshots:
+                logger.info(f"    {os.path.basename(s)}")
         logger.info(f"  Output:         {self.output_dir}")
 
         logger.info("")
