@@ -196,6 +196,25 @@ Y los modulos de Slicer (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) lo impor
 - Dialogo modal bloquea Slicer → el medico no puede navegar. Solucion: `setModal(False)` + `show()` + `processEvents()` loop
 - `tasklist` en Slicer a veces no detecta otros procesos Slicer. `PowerShell Get-Process` es mas confiable
 - Guardar escena .mrb tras cada paso es esencial para BD futura y debug
+- El pipeline termina despues de validacion medica. Los pasos MCNP se agregaran despues.
+- Los screenshots se guardan en `resultados_test/screenshots/` y las escenas en `resultados_test/scenes/`
+- `pipeline_results.json` en `resultados_test/` con historial completo de ejecuciones
+
+### Archivos generados/fsdfsdfsdf
+
+| Archivo | Proposito |
+|---|---|
+| `totalsegmentator_config.jsonc` | Config externa de TS (task, fast, force_cpu, subset, etc.) |
+| `phantom_builder.py` | Paso futuro: convertir segmentacion TS → phantom tejidos |
+| `source_builder.py` | Paso futuro: definir fuente desde PET |
+| `geometry_builder.py` | Paso futuro: construir geometria voxelizada |
+| `tally_builder.py` | Paso futuro: configurar detectores MCNP |
+
+### Directorios de salida
+- **Screenshots**: `resultados_test/screenshots/` — 6 PNG por ejecucion
+- **Escenas MRB**: `resultados_test/scenes/` — 6 .mrb con timestamp
+- **Checkpoints**: `resultados_test/.checkpoints/pipeline_checkpoint.json`
+- **Historial BD**: `resultados_test/pipeline_results.json` (historial acumulado)
 
 ### Comandos
 ```bash

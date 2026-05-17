@@ -30,17 +30,70 @@ def check_totalsegmentator() -> bool:
         return False
 
 
+def load_ts_config(config_path=None) -> dict:
+    """
+    Carga la configuracion de TotalSegmentator desde un archivo JSONC.
+
+    Args:
+        config_path: Ruta al .jsonc. Si es None, busca en el directorio del script.
+
+    Returns:
+        dict con parametros: task, fast, force_cpu, subset, interactive, ...
+    """
+    import json
+    import os
+    import re
+
+    if config_path is None:
+        config_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "totalsegmentator_config.jsonc"
+        )
+
+    defaults = {
+        "task": "total",
+        "fast": True,
+        "force_cpu": True,
+        "subset": None,
+        "interactive": False,
+        "use_standard_segment_names": True,
+    }
+
+    if not os.path.exists(config_path):
+        logger.info(f"  Config JSONC no encontrado: {config_path}")
+        logger.info(f"  Usando valores por defecto: {defaults}")
+        return defaults
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Eliminar comentarios // y /* */ del JSONC
+        content = re.sub(r'//.*', '', content)
+        content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+        config = json.loads(content)
+        defaults.update(config)
+        logger.info(f"  Config cargada desde: {config_path}")
+        for k, v in defaults.items():
+            logger.info(f"    {k}: {v}")
+    except Exception as e:
+        logger.warning(f"  Error cargando config JSONC: {e}")
+        logger.info(f"  Usando valores por defecto: {defaults}")
+
+    return defaults
+
+
 def run_segmentation_totalsegmentator(ct_node_name: str, output_dir: str, force_cpu: bool = True):
     """
     Ejecuta TotalSegmentator via TotalSegmentatorLogic.process() (API interna de Slicer).
     Busca el volumen por su NOMBRE en la escena de Slicer.
+    Carga la config desde totalsegmentator_config.jsonc.
 
     Referencia: TotalSegmentator.py → TotalSegmentatorLogic.process()
     (NO usar slicer.cli.run() - TS no es CLI module, no tiene CreateNodeInScene)
 
     Args:
         ct_node_name: Nombre del volumen CT en la escena de Slicer (ej: "3Dosim_CT_anon")
-        output_dir: (no usado, compatibility)
+        output_dir: Directorio de salida (para buscar config)
         force_cpu: True fuerza CPU, False permite GPU si disponible
     """
     import slicer
@@ -52,6 +105,14 @@ def run_segmentation_totalsegmentator(ct_node_name: str, output_dir: str, force_
     logger.info("")
 
     t_start = time.time()
+
+    # Cargar config desde JSONC
+    config = load_ts_config()
+    task = config.get("task", "total")
+    fast = config.get("fast", True)
+    cpu = config.get("force_cpu", force_cpu)
+    subset = config.get("subset", None)
+    interactive = config.get("interactive", False)
 
     # Buscar el volumen CT por su nombre en la escena de Slicer
     ct_node = slicer.util.getNode(ct_node_name)
@@ -80,11 +141,13 @@ def run_segmentation_totalsegmentator(ct_node_name: str, output_dir: str, force_
         logic = TotalSegmentatorLogic()
         logic.logCallback = lambda msg: logger.info(f"  [TS] {msg}")
         logic.clearOutputFolder = True
-        logic.useStandardSegmentNames = True
+        logic.useStandardSegmentNames = config.get("use_standard_segment_names", True)
 
-        device_str = "CPU" if force_cpu else "auto (GPU si disponible)"
+        device_str = "CPU" if cpu else "auto (GPU si disponible)"
         logger.info(f"  Device: {device_str}")
-        logger.info(f"  Task: total (fast=True)")
+        logger.info(f"  Task: {task} (fast={fast})")
+        if subset:
+            logger.info(f"  Subset: {subset}")
 
         # Paso 1: asegurar que los paquetes Python de TS esten instalados
         logger.info("  Verificando/instalando dependencias Python de TotalSegmentator...")
@@ -96,10 +159,11 @@ def run_segmentation_totalsegmentator(ct_node_name: str, output_dir: str, force_
         logic.process(
             inputVolume=ct_node,
             outputSegmentation=seg_node,
-            fast=True,
-            cpu=force_cpu,
-            task="total",
-            interactive=False
+            fast=fast,
+            cpu=cpu,
+            task=task,
+            subset=subset,
+            interactive=interactive,
         )
         logger.info("  TotalSegmentator completado")
 
