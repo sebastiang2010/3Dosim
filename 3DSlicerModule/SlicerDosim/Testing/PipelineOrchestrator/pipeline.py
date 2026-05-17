@@ -38,7 +38,8 @@ class PipelineTestOrchestrator:
     STEP_GENERATE_MCNP = "generate_mcnp"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
-                 no_consola: bool = False, segmenter: str = "simple"):
+                 no_consola: bool = False, segmenter: str = "simple",
+                 stop_before_segment: bool = False):
         self.data_dir = data_dir
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
@@ -67,6 +68,11 @@ class PipelineTestOrchestrator:
         # Metodo de segmentacion
         self.segmenter = segmenter
         logger.info(f"  Segmentador:    {segmenter}")
+
+        # Stop antes de segmentacion (para hacer TS manual)
+        self.stop_before_segment = stop_before_segment
+        if stop_before_segment:
+            logger.info("  Modo:           STOP antes de segmentacion (manual)")
 
         # Consola interactiva de comandos
         self.no_consola = no_consola
@@ -135,6 +141,58 @@ class PipelineTestOrchestrator:
         if not self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
                                      self._anonymize):
             logger.warning("Anonimizacion fallo, continuando...")
+
+        # --- STOP BEFORE SEGMENT (para hacer TS manual) ---
+        if self.stop_before_segment:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info(" PIPELINE DETENIDO ANTES DE SEGMENTACION")
+            logger.info("=" * 60)
+            logger.info("")
+            logger.info("Pasos completados:")
+            logger.info("  1. check_slicer")
+            logger.info("  2. load_dicom       → CT + PET cargados")
+            logger.info("  3. remove_couch_air → camilla y aire eliminados")
+            logger.info("  4. show_fusion      → fusion CT+PET lista")
+            logger.info("  5. anonymize        → DICOM anonimizados")
+            logger.info("")
+            logger.info("Archivos generados:")
+            logger.info(f"  Screenshots:  {self.output_dir}/screenshots/")
+            logger.info(f"  Escena Slicer: {self.output_dir}/scenes/")
+            logger.info(f"  DICOM anon:   {self.anon_dir}")
+            logger.info("")
+            logger.info("Para correr TotalSegmentator manual:")
+            logger.info("  Parametros recomendados (fast):")
+            logger.info("    device='cpu'")
+            logger.info("    fast=True")
+            logger.info("    body_seg=True")
+            logger.info("")
+            logger.info("  Desde Python en Slicer:")
+            logger.info("    from totalsegmentator.python_api import totalsegmentator")
+            logger.info("    totalsegmentator(")
+            logger.info('        input="path/to/ct.nii.gz",')
+            logger.info('        output="path/to/output",')
+            logger.info("        device='cpu', fast=True, body_seg=True")
+            logger.info("    )")
+            logger.info("")
+            logger.info("  O desde terminal externa:")
+            logger.info("    TotalSegmentator -i ct.nii.gz -o ts_output --fast --body_seg")
+            logger.info("")
+            logger.info("  Luego cargar resultado en Slicer y continuar con validacion.")
+            logger.info("")
+            logger.info("  Para retomar pipeline (sin --reset):")
+            logger.info("    Segmentacion manual lista → ejecutar sin --reset")
+            logger.info("    El checkpoint saltara al paso 7 (validacion medica)")
+            logger.info("")
+            logger.info("=" * 60)
+
+            # Guardar escena para que el usuario tenga el estado actual
+            self._save_scene("01_pre_segmentacion_manual")
+
+            # Reporte parcial
+            self._log_consola("Pipeline detenido antes de segmentacion (modo manual)")
+            self._report()
+            return
 
         # --- PASO CRITICO: SEGMENTACION ---
         seg_display = f"Segmentando ({self.segmenter})"

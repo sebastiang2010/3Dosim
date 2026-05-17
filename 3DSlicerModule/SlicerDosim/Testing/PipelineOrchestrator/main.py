@@ -55,6 +55,11 @@ def main():
         action="store_true",
         help="Deshabilita la consola interactiva de comandos",
     )
+    parser.add_argument(
+        "--stop-before-segment",
+        action="store_true",
+        help="Ejecuta hasta antes de segmentacion, luego muestra parametros TS y sale",
+    )
     args, _ = parser.parse_known_args()
 
     from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
@@ -65,6 +70,7 @@ def main():
         mcp_port=args.mcp_port,
         no_consola=args.no_consola,
         segmenter=args.segmenter,
+        stop_before_segment=args.stop_before_segment,
     )
     orchestrator.run()
 

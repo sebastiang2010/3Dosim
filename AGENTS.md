@@ -140,27 +140,30 @@ Y los modulos de Slicer (SlicerDosim, SlicerDosimMod2, SlicerDosimMod3) lo impor
 & "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --reset
 ```
 
-## Sesion 16-May 19:10 — Checkpoint
+## Sesion 16-May 23:20 — Checkpoint
 
 ### Que se hizo
-1. **pipeline.py**: show_fusion movido DESPUES de remove_couch_air (CT sin camilla). CT W/L fijo 400/40. PET W/L 40/20 basado en datos reales. Pipeline se detiene si segmentation o validacion fallan.
-2. **segmentation.py**: ELIMINADO threading (TotalSegmentator usa multiprocessing y crashea en threads). ELIMINADO phantom sintetico + dialogo quick/full. TS corre en MAIN thread con barra indeterminada antes/despues. MsgBox avisa que Slicer se congelara 5-15 min. Parametros: device="cpu", fast=True, body_seg=True.
-3. **mcp_server.py**: NUEVO - servidor MCP TCP raw en puerto 2026. Acepta comandos JSON (ping, status, codigo Python). Funcion take_screenshot().
-4. **git_commit.py + pipeline.py**: Fix tipo `str | None` -> `"str | None"` para Python 3.9.
+1. **segmentation.py**: Re-agregado TotalSegmentator mode (fast, body_seg, main thread) con `--segmenter totalsegmentator`. Fix kwarg `nora_postprocessing` eliminado.
+2. **main.py**: Nuevo flag `--segmenter {simple, totalsegmentator}`.
+3. **pipeline.py**: Nuevo `_save_scene()` guarda escena Slicer en `.mrb` (formato comprimido). Save point 1 tras carga DICOM, save point 2 tras validacion medica.
+4. **Pipeline ejecutado** con `--segmenter totalsegmentator --reset`
 
-### Error conocido
-- `'bool' object is not callable` en TotalSegmentator cuando se ejecuta en hilo (threading + multiprocessing incompatible). Solucion: main thread.
+### Errores conocidos
+- **TotalSegmentator no funciona en Slicer embebido**: incluso en main thread, TS falla con `AttributeError: module 'qt' has no attribute 'QTimer'` y `AssertionError: Not forking`. Es incompatible con el multiprocessing `spawn` de Windows + Slicer Python. Solucion: usar `--segmenter simple` (threshold + morfologia) o ejecutar TS como subproceso externo.
+- Los pasos 1-5 del pipeline funcionan OK: carga DICOM, remove couch, fusion, anonimizacion.
 
 ### Lo que falta (proxima sesion)
-1. Ejecutar pipeline con `--reset` y verificar que TS funciona en main thread
-2. Verificar fusion CT+PET (Rainbow colormap, W/L correcto)
-3. Verificar MCP server responde en puerto 2026
-4. Verificar screenshots se guardan en output_dir/screenshots/
-5. Pipeline completo hasta Modulo 2 MCNP
+1. Usar `--segmenter simple` para pipeline completo hasta MCNP (TS no funciona en Slicer)
+2. Verificar guardado `.mrb` en output_dir/scenes/
+3. Pipeline completo hasta Modulo 2 MCNP
 
-### Comando
+### Comandos
 ```bash
-& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --reset
+# Con segmentacion simple (threshold, funciona siempre)
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --segmenter simple --reset
+
+# Con TotalSegmentator (NO funciona en Slicer embebido)
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --segmenter totalsegmentator --reset
 ```
 
 ## Comandos utiles
