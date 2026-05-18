@@ -148,7 +148,7 @@ def _show_validation_dialog() -> bool:
         # Event loop REAL de Qt: Slicer responde 100%, el medico
         # puede navegar slices, modificar ROIs, rotar 3D, etc.
         loop = QEventLoop()
-        dialog.finished.connect(loop.quit)
+        dialog.finished.connect(lambda _: loop.quit())
         loop.exec()
 
         return resultado[0]
