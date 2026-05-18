@@ -12,6 +12,8 @@ from PipelineOrchestrator import anonymize
 from PipelineOrchestrator import couch_remover
 from PipelineOrchestrator import segmentation
 from PipelineOrchestrator import validation
+from PipelineOrchestrator import tumor_segmentation
+from PipelineOrchestrator import tumor_validation
 from PipelineOrchestrator import mcnp_builder
 from PipelineOrchestrator import phantom_builder
 from PipelineOrchestrator import source_builder
@@ -38,6 +40,8 @@ class PipelineTestOrchestrator:
     STEP_REMOVE_COUCH  = "remove_couch_air"
     STEP_SEGMENT       = "segment_phantom"
     STEP_VALIDATE       = "validate_segmentation"
+    STEP_SEGMENT_TUMOR   = "segment_tumor"
+    STEP_VALIDATE_TUMOR  = "validate_tumor"
     STEP_BUILD_PHANTOM  = "build_phantom"
     STEP_BUILD_SOURCE   = "build_source"
     STEP_BUILD_GEOMETRY = "build_geometry"
@@ -64,6 +68,7 @@ class PipelineTestOrchestrator:
         self.ct_masked_node = None   # CT sin camilla/aire (para visualizacion)
         self.pet_node = None
         self.segmentation_node = None
+        self.tumor_segmentation_node = None
         self.phantom_nifti_path = None
         self.mcnp_path = None
         self.ct_node_name = None
@@ -254,12 +259,38 @@ class PipelineTestOrchestrator:
         self._save_scene("06_post_validacion")
         self.tomar_screenshot("06_validacion_medica")
 
+        # --- PASO CRITICO: SEGMENTACION TUMORAL DESDE PET ---
+        self._log_consola("Iniciando segmentacion tumoral desde PET...")
+        tumor_ok = self._checkpoint_step(self.STEP_SEGMENT_TUMOR, "Segmentando tumor desde PET",
+                                          self._segment_tumor,
+                                          data_func=lambda: {"tumor_segmentation_node_name": self.tumor_segmentation_node.GetName() if self.tumor_segmentation_node else None})
+        if not tumor_ok:
+            logger.warning("Segmentacion tumoral no disponible, continuando sin tumor...")
+            self._log_consola("Segmentacion tumoral no disponible, continuando...")
+        else:
+            self._save_scene("07_tumor_segmentation")
+            self.tomar_screenshot("07_tumor_segmentation")
+
+            # --- PASO CRITICO: VALIDACION MEDICA DEL TUMOR ---
+            self._log_consola("Esperando validacion medica del tumor...")
+            if not self._checkpoint_step(self.STEP_VALIDATE_TUMOR, "Validacion medica del tumor",
+                                          self._validate_tumor,
+                                          data_func=lambda: {"validado_por": "medico",
+                                                             "timestamp": __import__('datetime').datetime.now().isoformat()}):
+                logger.error("Validacion tumoral rechazada. Pipeline detenido.")
+                self._log_consola("Tumor RECHAZADO por medico. Pipeline detenido.")
+                self._report()
+                return
+
+            self._save_scene("08_post_validacion_tumor")
+            self.tomar_screenshot("08_validacion_tumor")
+
         # Post-validacion: aqui se agregaran los pasos de MCNP (Modulo 2)
         # pendientes: phantom desde segmentacion, fuente desde PET,
         #            geometria voxelizada, tallies, escritura .i
         logger.info("")
         logger.info("  ╔════════════════════════════════════════════════════╗")
-        logger.info("  ║   PIPELINE COMPLETO (hasta validacion medica)    ║")
+        logger.info("  ║   PIPELINE COMPLETO (hasta segmentacion tumoral) ║")
         logger.info("  ║                                                  ║")
         logger.info("  ║   Proximos pasos (Modulo 2 - MCNP):             ║")
         logger.info("  ║     1. Phantom desde segmentacion               ║")
@@ -270,10 +301,10 @@ class PipelineTestOrchestrator:
         logger.info("  ╚════════════════════════════════════════════════════╝")
         logger.info("")
 
-        self._log_consola("Pipeline completado hasta validacion medica. Generando reporte...")
+        self._log_consola("Pipeline completado hasta segmentacion tumoral. Generando reporte...")
         ok = self._report()
         if ok:
-            self._log_consola("Pipeline finalizado EXITOSAMENTE (hasta validacion)")
+            self._log_consola("Pipeline finalizado EXITOSAMENTE")
             git_commit.prompt_git_commit(self.data_dir)
         else:
             self._log_consola("Pipeline finalizado con ERRORES. Revise el reporte.")
@@ -353,6 +384,7 @@ class PipelineTestOrchestrator:
             "ct_node_name": "ct_node_name",
             "pet_node_name": "pet_node_name",
             "ct_masked_node_name": "ct_masked_node_name",
+            "tumor_segmentation_node_name": "tumor_segmentation_node_name",
         }
         for data_key, attr_name in restore_map.items():
             if data_key in data and data[data_key] is not None:
@@ -697,6 +729,34 @@ class PipelineTestOrchestrator:
     def _do_validation(self):
         validation.validate_segmentation()
 
+    def _segment_tumor(self):
+        """
+        Segmenta tumor desde PET usando SUV threshold + mascara hepatica.
+        Requiere que TotalSegmentator se haya ejecutado (self.segmentation_node).
+        """
+        pet_node = self.pet_node
+        seg_node = self.segmentation_node
+
+        if pet_node is None:
+            logger.warning("  PET no disponible, saltando segmentacion tumoral")
+            return
+
+        if seg_node is None:
+            logger.warning("  Segmentacion corporal no disponible, saltando tumor")
+            return
+
+        tumor_node = tumor_segmentation.segment_tumor_from_pet(
+            pet_node=pet_node,
+            segmentation_node=seg_node,
+            suv_threshold=2.5,
+            min_volume_cc=1.0,
+            segment_name="higado",
+        )
+        self.tumor_segmentation_node = tumor_node
+
+    def _validate_tumor(self):
+        tumor_validation.validate_tumor_segmentation()
+
     def _placeholder_mcnp_steps(self):
         """Placeholder para futuros pasos de MCNP.
         Se implementaran: phantom, source, geometry, tallies, writer.
@@ -802,6 +862,8 @@ class PipelineTestOrchestrator:
             logger.info(f"  Phantom NIfTI:  {self.phantom_nifti_path}")
         if self.mcnp_path:
             logger.info(f"  MCNP input:     {self.mcnp_path}")
+        if self.tumor_segmentation_node:
+            logger.info(f"  Tumor seg:      {self.tumor_segmentation_node.GetName()}")
         if self.screenshots:
             logger.info(f"  Screenshots:     {len(self.screenshots)} archivos")
             for s in self.screenshots:

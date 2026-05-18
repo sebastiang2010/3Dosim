@@ -7,8 +7,10 @@ Estructura modular que luego se promocionara a SlicerDosimLib/orchestrator/:
   anonymize.py      - Anonimizacion DICOM (pydicom)
   couch_remover.py  - Eliminacion de camilla y aire del CT
   segmentation.py   - TotalSegmentator en main thread (sin barra congelada)
-  validation.py     - Dialogo de validacion medica obligatoria
-  mcnp_builder.py   - Generacion y verificacion de entrada MCNP
+   validation.py     - Dialogo de validacion medica obligatoria
+   tumor_segmentation.py - Segmentacion tumoral desde PET (SUV threshold)
+   tumor_validation.py   - Dialogo de validacion medica del tumor
+   mcnp_builder.py   - Generacion y verificacion de entrada MCNP
   git_commit.py     - Prompt de commit git al finalizar
   pipeline.py       - PipelineTestOrchestrator: orquesta todos los pasos
   comandos.py       - Consola interactiva de comandos (lenguaje natural)
