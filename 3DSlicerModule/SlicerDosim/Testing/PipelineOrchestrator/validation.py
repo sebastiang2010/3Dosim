@@ -7,7 +7,6 @@ Solo cuando hace clic en APROBAR o RECHAZAR se continua.
 """
 
 import logging
-import time
 
 logger = logging.getLogger("3DosimTest")
 
@@ -136,14 +135,10 @@ def _show_validation_dialog() -> bool:
         btn_no.clicked.connect(on_no)
         dialog.finished.connect(on_dialog_closed)
 
-        # Posicionar centrado sobre Slicer (no obstructivo)
+        # Posicionar centrado sobre Slicer (geometry es propiedad en Slicer Qt)
         dialog.adjustSize()
-        main_rect = main.geometry()
-        dlg_rect = dialog.geometry()
-        dialog.move(
-            main_rect.x() + (main_rect.width() - dlg_rect.width()) // 2,
-            main_rect.y() + (main_rect.height() - dlg_rect.height()) // 3
-        )
+        main_rect = main.geometry
+        dlg_rect = dialog.geometry
 
         logger.info("  VALIDACION MEDICA — dialogo NO MODAL, Slicer COMPLETAMENTE operativo")
         logger.info("  Navegue slices, oculte PET, revise en 3D, luego APROBAR o RECHAZAR")

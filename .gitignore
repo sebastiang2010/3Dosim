@@ -8,8 +8,3 @@ __pycache__/
 *.mrb
 *.mrml
 resultados_test/
-
-# Archivos grandes (imagenes medicas)
-*.nii
-*.nii.gz
-*.nrrd
