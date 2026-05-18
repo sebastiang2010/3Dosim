@@ -61,6 +61,7 @@ class PipelineTestOrchestrator:
             self.checkpoint.reset()
 
         self.ct_node = None
+        self.ct_masked_node = None   # CT sin camilla/aire (para visualizacion)
         self.pet_node = None
         self.segmentation_node = None
         self.phantom_nifti_path = None
@@ -152,7 +153,8 @@ class PipelineTestOrchestrator:
 
         if not self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
                                      self._remove_couch_air,
-                                     data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None}):
+                                     data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                                                        "ct_masked_node_name": self.ct_masked_node.GetName() if self.ct_masked_node else None}):
             logger.warning("No se pudo eliminar camilla, continuando...")
         self._save_scene("02_remove_couch")
         self.tomar_screenshot("02_remove_couch")
@@ -350,6 +352,7 @@ class PipelineTestOrchestrator:
             "mcnp_path": "mcnp_path",
             "ct_node_name": "ct_node_name",
             "pet_node_name": "pet_node_name",
+            "ct_masked_node_name": "ct_masked_node_name",
         }
         for data_key, attr_name in restore_map.items():
             if data_key in data and data[data_key] is not None:
@@ -625,10 +628,11 @@ class PipelineTestOrchestrator:
             ct_dn.SetDefaultColorMap()
             self.ct_node.SetAndObserveDisplayNodeID(ct_dn.GetID())
 
-        # Configurar fusion
+        # Configurar fusion (usar CT sin camilla como fondo si existe)
+        bg_node = self.ct_masked_node if self.ct_masked_node else self.ct_node
         if not self.pet_node:
             logger.info("  PET no disponible, mostrando solo CT")
-            slicer.util.setSliceViewerLayers(background=self.ct_node)
+            slicer.util.setSliceViewerLayers(background=bg_node)
         else:
             logger.info("  Aplicando colormap Rainbow al PET...")
             # Asegurar display node para PET
@@ -646,16 +650,18 @@ class PipelineTestOrchestrator:
             pet_dn.AutoWindowLevelOff()
             pet_dn.SetWindowLevel(40.0, 20.0)
 
-            # Mostrar fusion
+            # Mostrar fusion (CT sin camilla como fondo)
             slicer.util.setSliceViewerLayers(
-                background=self.ct_node,
+                background=bg_node,
                 foreground=self.pet_node,
                 foregroundOpacity=0.35
             )
 
-            # CT: window/level fijo para abdomen (ya sin camilla)
-            ct_dn.AutoWindowLevelOff()
-            ct_dn.SetWindowLevel(400.0, 40.0)
+            # Ajustar window/level del CT sin camilla
+            bg_dn = bg_node.GetDisplayNode()
+            if bg_dn:
+                bg_dn.AutoWindowLevelOff()
+                bg_dn.SetWindowLevel(400.0, 40.0)
 
             logger.info("  Fusion CT+PET lista en vistas axial/sagital/coronal")
             logger.info("  PET: Rainbow colormap, opacidad 35%")
@@ -670,7 +676,9 @@ class PipelineTestOrchestrator:
         anonymize.anonymize(self.ct_node, self.ct_dir, self.pet_dir, self.anon_dir, self.pet_node)
 
     def _remove_couch_air(self):
-        couch_remover.remove_couch_and_air(self.ct_node)
+        masked_node = couch_remover.remove_couch_and_air(self.ct_node)
+        if masked_node is not None:
+            self.ct_masked_node = masked_node
 
     def _segment(self):
         if self.segmenter == "totalsegmentator":

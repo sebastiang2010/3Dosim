@@ -20,7 +20,12 @@ from PipelineOrchestrator.utils import show_progress
 def remove_couch_and_air(ct_node):
     """
     Elimina la camilla y el aire exterior del volumen CT.
-    Modifica el nodo CT in-place.
+    NO modifica el nodo CT original. Crea un NUEVO nodo 'CT_sin_camilla'
+    con la mascara aplicada, dejando el CT original intacto para TotalSegmentator.
+
+    Returns:
+        vtkMRMLScalarVolumeNode: el nuevo nodo con la mascara aplicada,
+        o None si no se pudo crear.
     """
     from vtk.util import numpy_support
     import vtk
@@ -53,7 +58,7 @@ def remove_couch_and_air(ct_node):
     z_range = np.where(body_mask.sum(axis=(1, 2)) > 0)[0]
     if len(z_range) == 0:
         logger.warning("  No se detecto cuerpo del paciente, saltando")
-        return
+        return None
     z_min, z_max = z_range[0], z_range[-1]
 
     for z in range(z_min, z_max + 1):
@@ -86,21 +91,51 @@ def remove_couch_and_air(ct_node):
             if right < dims[0] - 5:
                 body_mask[z, :, right + 3:] = 0
 
-    # Paso 5: Aplicar mascara al CT
+    # Paso 5: Aplicar mascara al CT (sobre copia, NO modificar original)
     show_progress("Aplicando mascara al volumen...")
     ct_masked = ct_np.copy()
     ct_masked[body_mask == 0] = -1024
 
     ct_masked_flat = ct_masked.ravel().astype(np.int16)
     vtk_arr = numpy_support.numpy_to_vtk(ct_masked_flat, deep=True)
-    ct_img.GetPointData().SetScalars(vtk_arr)
-    ct_img.Modified()
+
+    # Crear nuevo vtkImageData para el nodo mascara
+    new_img = vtk.vtkImageData()
+    new_img.SetDimensions(dims)
+    new_img.SetSpacing(ct_img.GetSpacing())
+    new_img.SetOrigin(ct_img.GetOrigin())
+    # Copiar direccion IJK To RAS si existe
+    direction_matrix = ct_img.GetDirectionMatrix()
+    if direction_matrix:
+        new_img.SetDirectionMatrix(direction_matrix)
+    new_img.GetPointData().SetScalars(vtk_arr)
+
+    # Crear nuevo nodo en Slicer
+    import slicer
+    masked_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
+    masked_node.SetName("CT_sin_camilla")
+    masked_node.SetAndObserveImageData(new_img)
+    # Copiar transformacion espacial del CT original
+    ijk_to_ras = vtk.vtkMatrix4x4()
+    ct_node.GetIJKToRASMatrix(ijk_to_ras)
+    masked_node.SetIJKToRASMatrix(ijk_to_ras)
+
+    # Crear display node para que se vea en las vistas
+    from slicer import vtkMRMLScalarVolumeDisplayNode
+    dn = vtkMRMLScalarVolumeDisplayNode()
+    slicer.mrmlScene.AddNode(dn)
+    dn.SetDefaultColorMap()
+    masked_node.SetAndObserveDisplayNodeID(dn.GetID())
 
     body_voxels = body_mask.sum()
     total_voxels = body_mask.size
     logger.info(f"  Camilla y aire eliminados")
     logger.info(f"  Voxels cuerpo: {body_voxels} / {total_voxels} "
                 f"({100 * body_voxels / total_voxels:.1f}%)")
+    logger.info(f"  Nodo original '{ct_node.GetName()}' intacto para TotalSegmentator")
+    logger.info(f"  Nodo mascara creado: 'CT_sin_camilla'")
+
+    return masked_node
 
 
 def _label_connected_components_2d(binary_img):
