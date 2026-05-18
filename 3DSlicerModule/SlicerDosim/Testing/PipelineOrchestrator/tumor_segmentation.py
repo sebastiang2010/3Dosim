@@ -22,7 +22,7 @@ def segment_tumor_from_pet(
     segmentation_node,
     suv_threshold: float = 2.5,
     min_volume_cc: float = 1.0,
-    segment_name: str = "higado",
+    segment_name: str = "liver",
 ):
     """
     Segmenta tumores desde PET usando SUV threshold dentro de un organo.
@@ -32,7 +32,7 @@ def segment_tumor_from_pet(
         segmentation_node: vtkMRMLSegmentationNode de TotalSegmentator
         suv_threshold: valor de SUV para threshold (default 2.5)
         min_volume_cc: volumen minimo en cm^3 para mantener una lesion
-        segment_name: nombre del segmento organo en la segmentacion (default "higado")
+        segment_name: nombre del segmento organo en ingles (default "liver", ej: "higado" en TS)
 
     Returns:
         vtkMRMLSegmentationNode con el(los) tumor(es), o None si no se encuentran.

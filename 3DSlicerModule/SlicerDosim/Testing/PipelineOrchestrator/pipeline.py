@@ -750,7 +750,7 @@ class PipelineTestOrchestrator:
             segmentation_node=seg_node,
             suv_threshold=2.5,
             min_volume_cc=1.0,
-            segment_name="higado",
+            segment_name="liver",
         )
         self.tumor_segmentation_node = tumor_node
 
