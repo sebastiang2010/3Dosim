@@ -38,6 +38,7 @@ class PipelineTestOrchestrator:
     STEP_SHOW_FUSION   = "show_fusion"
     STEP_ANONYMIZE     = "anonymize"
     STEP_REMOVE_COUCH  = "remove_couch_air"
+    STEP_RESAMPLE_PET  = "resample_pet_to_ct"
     STEP_SEGMENT       = "segment_phantom"
     STEP_VALIDATE       = "validate_segmentation"
     STEP_SEGMENT_TUMOR   = "segment_tumor"
@@ -171,12 +172,20 @@ class PipelineTestOrchestrator:
         self.tomar_screenshot("03_fusion_ct_pet")
 
         if not self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
-                                     self._anonymize,
-                                     data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
-                                                        "pet_node_name": self.pet_node.GetName() if self.pet_node else None}):
+                                      self._anonymize,
+                                      data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                                                         "pet_node_name": self.pet_node.GetName() if self.pet_node else None}):
             logger.warning("Anonimizacion fallo, continuando...")
         self._save_scene("04_anonymize")
         self.tomar_screenshot("04_anonymize")
+
+        # Resample PET to CT geometry if PET exists
+        if not self._checkpoint_step(self.STEP_RESAMPLE_PET, "Re-muestreando PET a geometria CT",
+                                      self._resample_pet_to_ct,
+                                      data_func=lambda: {"pet_resampled": self.pet_node is not None}):
+            logger.warning("Re-muestreo PET fallo, continuando con PET original...")
+        self._save_scene("05_pet_resampled")
+        self.tomar_screenshot("05_pet_resampled")
 
         # --- STOP BEFORE SEGMENT (para hacer TS manual) ---
         if self.stop_before_segment:
@@ -706,6 +715,39 @@ class PipelineTestOrchestrator:
 
     def _anonymize(self):
         anonymize.anonymize(self.ct_node, self.ct_dir, self.pet_dir, self.anon_dir, self.pet_node)
+
+    def _resample_pet_to_ct(self):
+        """Re-muestrea la PET a la geometria del CT usando registro previo."""
+        import slicer
+        from SlicerDosim.SlicerDosimLib import registration
+        
+        if not self.pet_node:
+            logger.warning("  PET no disponible, saltando re-muestreo")
+            return
+            
+        logger.info("  Ejecutando registro CT->PET...")
+        reg = registration.DosimetryRegistration()
+        
+        # Registrar PET al CT (CT es fijo, PET es movil)
+        try:
+            # Primero aplicar registro para obtener la transformada
+            registered_pet = reg.register(
+                fixed_node=self.ct_node,
+                moving_node=self.pet_node,
+                method=registration.DosimetryRegistration.METHOD_BRAINSFIT
+            )
+            
+            if registered_pet:
+                # Reemplazar el nodo PET original con el registrado
+                self.pet_node = registered_pet
+                logger.info("  PET re-muestreado a geometria CT exitosamente")
+            else:
+                logger.warning("  Registro PET no produjo salida válida")
+                
+        except Exception as e:
+            logger.error(f"  Error en registro PET: {e}")
+            # Continuar con PET original si falla el registro
+            logger.warning("  Continuando con PET original debido a error en registro")
 
     def _remove_couch_air(self):
         masked_node = couch_remover.remove_couch_and_air(self.ct_node)
