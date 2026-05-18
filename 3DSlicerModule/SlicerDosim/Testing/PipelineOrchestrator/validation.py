@@ -70,7 +70,7 @@ def _show_validation_dialog() -> bool:
         True si el medico aprueba, False si rechaza.
     """
     try:
-        from qt import QLabel, QVBoxLayout, QDialog, QPushButton, QHBoxLayout
+        from qt import QLabel, QVBoxLayout, QDialog, QPushButton, QHBoxLayout, QEventLoop
         import slicer
 
         app = slicer.app
@@ -150,10 +150,11 @@ def _show_validation_dialog() -> bool:
 
         dialog.show()
 
-        # Loop no bloqueante: Slicer responde 100%
-        while resultado[0] is None:
-            app.processEvents()
-            time.sleep(0.05)
+        # Event loop REAL de Qt: Slicer responde 100%, el medico
+        # puede navegar slices, modificar ROIs, rotar 3D, etc.
+        loop = QEventLoop()
+        dialog.finished.connect(loop.quit)
+        loop.exec()
 
         return resultado[0]
 
