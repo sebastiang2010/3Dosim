@@ -197,19 +197,29 @@ def _extract_segment_mask(segmentation_node, segment_name: str):
                 logger.info(f"    - {segment.GetName()}")
         return None
 
-    # Exportar SOLO ese segmento a labelmap
+    # Exportar SOLO el segmento encontrado a labelmap
+    # Usar ExportSegmentToLabelmapNode (singular) que acepta string ID directamente
     labelmap_node = slicer.mrmlScene.AddNewNodeByClass(
         "vtkMRMLLabelMapVolumeNode", "__temp_organ_mask__"
     )
 
-    # Crear string array con solo el ID encontrado
-    ids_to_export = vtk.vtkStringArray()
-    ids_to_export.InsertNextValue(found_id)
-
     try:
-        slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
-            segmentation_node, labelmap_node, ids_to_export
-        )
+        # Buscar nodo de referencia para geometria (el CT de la escena)
+        ref_node = None
+        try:
+            ref_node = slicer.util.getNode("3Dosim_CT_anon")
+        except Exception:
+            pass
+
+        if ref_node is None:
+            # Sin referencia, usar directamente (puede fallar si no hay geometria)
+            slicer.modules.segmentations.logic().ExportSegmentToLabelmapNode(
+                segmentation_node, found_id, labelmap_node
+            )
+        else:
+            slicer.modules.segmentations.logic().ExportSegmentToLabelmapNode(
+                segmentation_node, found_id, labelmap_node, ref_node
+            )
 
         image_data = labelmap_node.GetImageData()
         if image_data is None:
