@@ -87,12 +87,12 @@ def prepare_tumor_segmentation(
 
     # --- 2. Iniciar servidor MONAI Label (si no esta corriendo) ---
     logger.info("  Verificando / iniciando servidor MONAI Label...")
-    server_proc = start_server(timeout=30)
+    server_proc = start_server(timeout=60)  # Increased timeout to 60 seconds
     server_ok = check_server()
     if server_ok:
         logger.info(f"  ✓ Servidor MONAI Label activo en http://127.0.0.1:8000")
     else:
-        logger.warning(f"  ✗ Servidor MONAI Label NO disponible")
+        logger.warning(f"  ✗ Servidor MONAI Label NO disponible tras 60 segundos")
 
     # --- 3. Extraer mascara del higado ---
     logger.info("  Extrayendo mascara del higado desde TotalSegmentator...")
@@ -141,8 +141,12 @@ def prepare_tumor_segmentation(
         logger.info("    Abra un browser en http://127.0.0.1:8000")
         logger.info("    Seleccione DeepEdit y segmenta el tumor")
         logger.info("")
-        logger.info("  Opcion 2 - MONAIAuto3DSeg en Slicer:")
-        logger.info("    Use el modulo MONAIAuto3DSeg para segmentar")
+        logger.info("  Opcion 2 - MONAIAuto3DSeg en Slicer (automatico):")
+        logger.info("    1. Vaya al modulo MONAIAuto3DSeg")
+        logger.info("    2. Seleccione el modelo 'liver_tumor' (o similar)")
+        logger.info("    3. Establezca el volumen de referencia como el CT")
+        logger.info("    4. Establezca el volumen de segmento como el nodo 'Tumor_MONAI'")
+        logger.info("    5. Haga clic en 'Apply'")
         logger.info("")
     else:
         logger.info("  MONAI Label server NO disponible")
@@ -153,7 +157,12 @@ def prepare_tumor_segmentation(
         logger.info("")
         logger.info("  Luego abra http://127.0.0.1:8000 en su browser")
         logger.info("")
-        logger.info("  Alternativa: use MONAIAuto3DSeg para segmentar el tumor")
+        logger.info("  Alternativa: use MONAIAuto3DSeg para segmentar el tumor automaticamente")
+        logger.info("    1. Vaya al modulo MONAIAuto3DSeg")
+        logger.info("    2. Seleccione el modelo 'liver_tumor' (o similar)")
+        logger.info("    3. Establezca el volumen de referencia como el CT")
+        logger.info("    4. Establezca el volumen de segmento como el nodo 'Tumor_MONAI'")
+        logger.info("    5. Haga clic en 'Apply'")
         logger.info("")
 
     logger.info("  El nodo 'Tumor_MONAI' esta listo para recibir la mascara")
