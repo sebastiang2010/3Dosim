@@ -50,9 +50,9 @@ def main():
     parser.add_argument(
         "--segmenter",
         type=str,
-        default="simple",
+        default="totalsegmentator",
         choices=["simple", "totalsegmentator"],
-        help="Metodo de segmentacion: 'simple' (threshold) o 'totalsegmentator' (rapido)",
+        help="Metodo de segmentacion (simple=threshold, totalsegmentator=IA)",
     )
     parser.add_argument(
         "--no-consola",

@@ -1,171 +1,196 @@
 """
-Segmentacion de tumores hepaticos desde PET (SUV threshold).
+Segmentacion tumoral hepatica — flujo simplificado.
 
 Algoritmo:
-  1. Extraer mascara del higado desde la segmentacion de TotalSegmentator
-  2. Threshold SUV > 2.5 dentro de la mascara hepatica
-  3. Post-procesamiento: remover clusters < 1 cm^3
-  4. Crear nodo vtkMRMLSegmentationNode con el resultado
+  1. Intentar iniciar servidor MONAI Label automaticamente
+  2. Extraer mascara del higado desde la segmentacion de TotalSegmentator
+  3. Calcular bounding box del higado + padding anatomico (10 mm)
+  4. Crear nodo de segmentacion tumoral VACIO
+  5. Mostrar instrucciones segun disponibilidad del servidor
 
-Requiere que TotalSegmentator se haya ejecutado con task="total" (incluye higado).
+El tumor lo segmenta el medico usando:
+  - Si server MONAI Label activo: interfaz web http://localhost:8000
+  - Si server no activo: usar MONAIAuto3DSeg u otra herramienta
+
+NO usa SUV threshold.
 """
 
 import logging
+import os
+from typing import Optional
 
 logger = logging.getLogger("3DosimTest")
 
 from PipelineOrchestrator.utils import show_progress
+from PipelineOrchestrator.monailabel_server import start_server, check_server
 
 
-def segment_tumor_from_pet(
-    pet_node,
+def prepare_tumor_segmentation(
     segmentation_node,
-    suv_threshold: float = 2.5,
-    min_volume_cc: float = 1.0,
+    ct_node,
+    pet_node=None,
     segment_name: str = "liver",
+    padding_mm: float = 10.0,
 ):
     """
-    Segmenta tumores desde PET usando SUV threshold dentro de un organo.
+    Prepara el entorno para segmentacion tumoral.
+
+    Flujo:
+      1. Intenta iniciar servidor MONAI Label automaticamente
+      2. Extrae el higado de TotalSegmentator
+      3. Calcula bounding box hepatica con padding
+      4. Crea nodo de tumor VACIO
+      5. Muestra instrucciones segun disponibilidad del servidor
 
     Args:
-        pet_node: vtkMRMLScalarVolumeNode del PET (valores SUV)
         segmentation_node: vtkMRMLSegmentationNode de TotalSegmentator
-        suv_threshold: valor de SUV para threshold (default 2.5)
-        min_volume_cc: volumen minimo en cm^3 para mantener una lesion
-        segment_name: nombre del segmento organo en ingles (default "liver", ej: "higado" en TS)
+        ct_node: vtkMRMLScalarVolumeNode del CT
+        pet_node: vtkMRMLScalarVolumeNode del PET (opcional)
+        segment_name: nombre del segmento del higado (default "liver")
+        padding_mm: padding alrededor del higado en mm (default 10)
 
     Returns:
-        vtkMRMLSegmentationNode con el(los) tumor(es), o None si no se encuentran.
+        dict con:
+            "tumor_node": vtkMRMLSegmentationNode (vacio)
+            "liver_mask": numpy array 3D de la mascara hepatica
+            "bbox": (rmin, rmax, cmin, cmax, zmin, zmax) bounding box
+            "liver_volume_cc": volumen del higado en cm^3
+            "server_ok": bool, True si MONAI Label server responde
 
     Raises:
-        RuntimeError: si falla la segmentacion tumoral
+        RuntimeError: si no se encuentra el higado en la segmentacion
     """
     import slicer
     import numpy as np
-    from scipy import ndimage as ndi
+    import vtk
 
     logger.info("")
     logger.info("  ========================================================")
-    logger.info("  Segmentacion tumoral desde PET (SUV threshold)")
+    logger.info("  Preparacion para segmentacion tumoral")
     logger.info("  ========================================================")
     logger.info("")
 
-    show_progress("Segmentando tumor desde PET...")
+    show_progress("Preparando ROI hepatica para segmentacion tumoral...")
 
     # --- 1. Verificar nodos ---
-    if pet_node is None:
-        raise RuntimeError("Nodo PET no disponible para segmentacion tumoral")
     if segmentation_node is None:
-        raise RuntimeError("Nodo de segmentacion no disponible para segmentacion tumoral")
+        raise RuntimeError("Nodo de segmentacion no disponible")
+    if ct_node is None:
+        raise RuntimeError("Nodo CT no disponible")
 
-    pet_name = pet_node.GetName()
-    logger.info(f"  PET: {pet_name}")
+    logger.info(f"  Segmentacion: {segmentation_node.GetName()}")
+    logger.info(f"  CT: {ct_node.GetName()}")
+    if pet_node:
+        logger.info(f"  PET: {pet_node.GetName()}")
     logger.info(f"  Organo mascara: '{segment_name}'")
-    logger.info(f"  SUV threshold: {suv_threshold}")
-    logger.info(f"  Volumen minimo lesion: {min_volume_cc} cm^3")
+    logger.info(f"  Padding: {padding_mm} mm")
 
-    # --- 2. Extraer mascara del organo desde la segmentacion ---
-    logger.info("  Extrayendo mascara del organo...")
-    organ_mask = _extract_segment_mask(segmentation_node, segment_name)
-    if organ_mask is None:
+    # --- 2. Iniciar servidor MONAI Label (si no esta corriendo) ---
+    logger.info("  Verificando / iniciando servidor MONAI Label...")
+    server_proc = start_server(timeout=30)
+    server_ok = check_server()
+    if server_ok:
+        logger.info(f"  ✓ Servidor MONAI Label activo en http://127.0.0.1:8000")
+    else:
+        logger.warning(f"  ✗ Servidor MONAI Label NO disponible")
+
+    # --- 3. Extraer mascara del higado ---
+    logger.info("  Extrayendo mascara del higado desde TotalSegmentator...")
+    liver_mask = _extract_segment_mask(segmentation_node, segment_name)
+    if liver_mask is None:
         raise RuntimeError(
             f"No se encontro el segmento '{segment_name}' en la segmentacion. "
-            "TotalSegmentator debe ejecutarse con task='total' para incluir organos."
-        )
-    organ_voxels = int(np.sum(organ_mask))
-    logger.info(f"  Voxeles en '{segment_name}': {organ_voxels}")
-
-    # --- 3. Obtener array PET ---
-    logger.info("  Leyendo volumen PET...")
-    pet_array = slicer.util.arrayFromVolume(pet_node)  # (K, J, I)
-    logger.info(f"  Dimensiones PET: {pet_array.shape}")
-
-    # Verificar que PET y mascara tengan mismas dimensiones
-    if pet_array.shape != organ_mask.shape:
-        raise RuntimeError(
-            f"Dimensiones PET {pet_array.shape} no coinciden con mascara {organ_mask.shape}. "
-            "CT y PET deben estar registrados."
+            "TotalSegmentator debe ejecutarse con task='total'."
         )
 
-    # --- 4. Threshold SUV dentro del organo ---
-    logger.info(f"  Aplicando threshold SUV > {suv_threshold}...")
-    tumor_mask = np.zeros_like(organ_mask, dtype=np.uint8)
-    tumor_region = (pet_array > suv_threshold) & (organ_mask > 0)
-    tumor_mask[tumor_region] = 1
-
-    tumor_voxels = int(np.sum(tumor_mask))
-    logger.info(f"  Voxeles SUV > {suv_threshold}: {tumor_voxels}")
-
-    if tumor_voxels == 0:
-        logger.warning(f"  No se encontraron voxeles con SUV > {suv_threshold}")
-        logger.info("  Creando segmentacion tumoral VACIA (sin tumores detectados)")
-        # Crear nodo vacio para que el medico pueda segmentar manualmente
-        empty_node = _create_tumor_segmentation_node(
-            None, pet_node, "Tumor", suv_threshold
-        )
-        return empty_node
-
-    # --- 5. Post-procesamiento: remover clusters pequenos ---
-    logger.info(f"  Filtrando clusters < {min_volume_cc} cm^3...")
-    labeled, num_features = ndi.label(tumor_mask)
-    if num_features > 0:
-        sizes = ndi.sum(tumor_mask, labeled, range(1, num_features + 1))
-        spacing = pet_node.GetSpacing()
-        voxel_vol_cc = spacing[0] * spacing[1] * spacing[2] / 1000.0
-        min_voxels = int(min_volume_cc / voxel_vol_cc)
-
-        kept_voxels = 0
-        for i, size in enumerate(sizes, 1):
-            if size < min_voxels:
-                tumor_mask[labeled == i] = 0
-            else:
-                kept_voxels += size
-
-        tumor_mask[tumor_mask > 0] = 1
-        logger.info(f"  Clusters grandes: {kept_voxels} voxeles")
-        logger.info(f"  Clusters pequenos eliminados: {tumor_voxels - kept_voxels} voxeles")
-
-    # --- 6. Volumen tumoral ---
-    spacing = pet_node.GetSpacing()
+    liver_voxels = int(np.sum(liver_mask))
+    spacing = ct_node.GetSpacing()
     voxel_vol_cc = spacing[0] * spacing[1] * spacing[2] / 1000.0
-    vol_cc = float(np.sum(tumor_mask)) * voxel_vol_cc
-    logger.info(f"  Volumen tumoral total: {vol_cc:.1f} cm^3")
+    liver_volume_cc = liver_voxels * voxel_vol_cc
+    logger.info(f"  Higado: {liver_voxels} voxeles, {liver_volume_cc:.1f} cm^3")
 
-    # --- 7. Crear nodo de segmentacion ---
-    logger.info("  Creando nodo de segmentacion tumoral...")
-    tumor_node = _create_tumor_segmentation_node(
-        tumor_mask, pet_node, "Tumor", suv_threshold
-    )
+    # --- 4. Calcular bounding box + padding ---
+    logger.info("  Calculando bounding box hepatica con padding...")
+    bbox = _compute_bbox_with_padding(liver_mask, spacing, padding_mm)
+    rmin, rmax, cmin, cmax, zmin, zmax = bbox
+    logger.info(f"  Bounding box (IJK):")
+    logger.info(f"    Filas:    {rmin} - {rmax}  ({rmax - rmin} px)")
+    logger.info(f"    Columnas: {cmin} - {cmax}  ({cmax - cmin} px)")
+    logger.info(f"    Slice:    {zmin} - {zmax}  ({zmax - zmin} px)")
 
-    if tumor_node:
-        logger.info(f"  Nodo: {tumor_node.GetName()}")
-        logger.info("  Segmentacion tumoral completada")
-        return tumor_node
+    logger.info(f"    Dimension fisica: "
+                f"{(rmax - rmin) * spacing[1]:.0f} x {(cmax - cmin) * spacing[0]:.0f} x "
+                f"{(zmax - zmin) * spacing[2]:.0f} mm")
+
+    # --- 5. Crear nodo de tumor vacio ---
+    logger.info("  Creando nodo de tumor vacio...")
+    tumor_node = _create_empty_tumor_node_fallback(ct_node)
+    logger.info(f"  Nodo creado: '{tumor_node.GetName()}'")
+
+    # --- 6. Instrucciones segun disponibilidad del servidor ---
+    logger.info("")
+    logger.info("  ========================================================")
+    logger.info("  SEGMENTACION TUMORAL - INSTRUCCIONES")
+    logger.info("  ========================================================")
+    logger.info("")
+
+    if server_ok:
+        logger.info("  MONAI Label server ACTIVO en http://127.0.0.1:8000")
+        logger.info("")
+        logger.info("  Opcion 1 - Interfaz Web (recomendado):")
+        logger.info("    Abra un browser en http://127.0.0.1:8000")
+        logger.info("    Seleccione DeepEdit y segmenta el tumor")
+        logger.info("")
+        logger.info("  Opcion 2 - MONAIAuto3DSeg en Slicer:")
+        logger.info("    Use el modulo MONAIAuto3DSeg para segmentar")
+        logger.info("")
     else:
-        raise RuntimeError("Fallo al crear nodo de segmentacion tumoral")
+        logger.info("  MONAI Label server NO disponible")
+        logger.info("")
+        logger.info("  Para iniciarlo manualmente:")
+        logger.info("    PythonSlicer.exe -m monailabel.main start_server"
+                    " --app .monai_app --port 8000 --studies .monai_studies")
+        logger.info("")
+        logger.info("  Luego abra http://127.0.0.1:8000 en su browser")
+        logger.info("")
+        logger.info("  Alternativa: use MONAIAuto3DSeg para segmentar el tumor")
+        logger.info("")
+
+    logger.info("  El nodo 'Tumor_MONAI' esta listo para recibir la mascara")
+    logger.info("  ========================================================")
+
+    show_progress("Nodo de tumor creado — revise instrucciones en consola")
+
+    return {
+        "tumor_node": tumor_node,
+        "liver_mask": liver_mask,
+        "bbox": bbox,
+        "liver_volume_cc": round(liver_volume_cc, 1),
+        "padding_mm": padding_mm,
+        "server_ok": server_ok,
+    }
 
 
-def _extract_segment_mask(segmentation_node, segment_name: str):
+def _extract_segment_mask(segmentation_node, segment_name: str) -> Optional["np.ndarray"]:
     """
     Extrae un segmento especifico de un vtkMRMLSegmentationNode como numpy array.
 
     Args:
         segmentation_node: vtkMRMLSegmentationNode
-        segment_name: nombre del segmento a extraer (ej: "higado")
+        segment_name: nombre del segmento a extraer (ej: "liver")
 
     Returns:
-        numpy array 3D uint8 con la mascara, o None si no se encuentra el segmento
+        numpy array 3D uint8 con la mascara, o None si no se encuentra
     """
     import slicer
     import numpy as np
-    from vtk.util import numpy_support
     import vtk
 
     seg = segmentation_node.GetSegmentation()
     if seg is None:
         return None
 
-    # Buscar segmento por nombre
+    # Buscar segmento por nombre (exacto o parcial)
     segment_ids = vtk.vtkStringArray()
     seg.GetSegmentIDs(segment_ids)
 
@@ -173,23 +198,26 @@ def _extract_segment_mask(segmentation_node, segment_name: str):
     for i in range(segment_ids.GetNumberOfValues()):
         sid = segment_ids.GetValue(i)
         segment = seg.GetSegment(sid)
-        if segment and segment.GetName().lower() == segment_name.lower():
-            found_id = sid
-            break
+        if segment:
+            seg_name = segment.GetName()
+            if seg_name.lower() == segment_name.lower():
+                found_id = sid
+                break
 
     if found_id is None:
-        # Intentar busqueda parcial
+        # Busqueda parcial (por si TS lo nombro distinto)
         for i in range(segment_ids.GetNumberOfValues()):
             sid = segment_ids.GetValue(i)
             segment = seg.GetSegment(sid)
             if segment and segment_name.lower() in segment.GetName().lower():
                 found_id = sid
-                logger.info(f"  Segmento encontrado por coincidencia parcial: '{segment.GetName()}'")
+                logger.info(f"  Segmento encontrado por coincidencia parcial: "
+                            f"'{segment.GetName()}'")
                 break
 
     if found_id is None:
-        logger.warning(f"  Segmento '{segment_name}' no encontrado en la segmentacion")
-        logger.info(f"  Segmentos disponibles:")
+        logger.warning(f"  Segmento '{segment_name}' no encontrado")
+        logger.info("  Segmentos disponibles en la segmentacion:")
         for i in range(segment_ids.GetNumberOfValues()):
             sid = segment_ids.GetValue(i)
             segment = seg.GetSegment(sid)
@@ -197,36 +225,40 @@ def _extract_segment_mask(segmentation_node, segment_name: str):
                 logger.info(f"    - {segment.GetName()}")
         return None
 
-    # Exportar SOLO el segmento encontrado a labelmap
-    # Usar ExportSegmentToLabelmapNode (singular) que acepta string ID directamente
+    # Exportar el segmento a labelmap usando API plural (compatible Slicer 5.x)
     labelmap_node = slicer.mrmlScene.AddNewNodeByClass(
-        "vtkMRMLLabelMapVolumeNode", "__temp_organ_mask__"
+        "vtkMRMLLabelMapVolumeNode", "__temp_liver_mask__"
     )
 
     try:
-        # Buscar nodo de referencia para geometria (el CT de la escena)
+        import vtk
+
+        # Buscar nodo de referencia CT para geometria
         ref_node = None
         try:
             ref_node = slicer.util.getNode("3Dosim_CT_anon")
         except Exception:
             pass
 
+        # ExportSegmentsToLabelmapNode requiere un vtkStringArray (plural)
+        # incluso para un solo segmento
+        segment_ids = vtk.vtkStringArray()
+        segment_ids.InsertNextValue(found_id)
+
         if ref_node is None:
-            # Sin referencia, usar directamente (puede fallar si no hay geometria)
-            slicer.modules.segmentations.logic().ExportSegmentToLabelmapNode(
-                segmentation_node, found_id, labelmap_node
+            slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
+                segmentation_node, segment_ids, labelmap_node
             )
         else:
-            slicer.modules.segmentations.logic().ExportSegmentToLabelmapNode(
-                segmentation_node, found_id, labelmap_node, ref_node
+            slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(
+                segmentation_node, segment_ids, labelmap_node, ref_node
             )
 
-        image_data = labelmap_node.GetImageData()
-        if image_data is None:
+        array = slicer.util.arrayFromVolume(labelmap_node)  # (K, J, I)
+        if array is None:
             slicer.mrmlScene.RemoveNode(labelmap_node)
             return None
 
-        array = numpy_support.vtk_to_array(image_data)  # (K, J, I)
         mask = (array > 0).astype(np.uint8)
 
         slicer.mrmlScene.RemoveNode(labelmap_node)
@@ -238,81 +270,75 @@ def _extract_segment_mask(segmentation_node, segment_name: str):
         return None
 
 
-def _create_tumor_segmentation_node(tumor_mask, ref_node, base_name: str, suv_threshold: float):
+def _compute_bbox_with_padding(mask, spacing, padding_mm: float = 10.0):
     """
-    Crea un vtkMRMLSegmentationNode desde una mascara numpy.
+    Calcula bounding box de la mascara con padding en mm.
 
     Args:
-        tumor_mask: numpy array 3D uint8, o None para nodo vacio
-        ref_node: nodo de referencia para geometria (ej: PET)
-        base_name: nombre base para la segmentacion
-        suv_threshold: umbral SUV usado (para el nombre)
+        mask: numpy array 3D uint8
+        spacing: (sx, sy, sz) espaciado en mm (de CT o PET)
+        padding_mm: padding adicional en mm
 
     Returns:
-        vtkMRMLSegmentationNode
+        tuple: (rmin, rmax, cmin, cmax, zmin, zmax) en coordenadas IJK
+    """
+    import numpy as np
+
+    # Encontrar voxeles positivos
+    coords = np.argwhere(mask > 0)
+    if coords.size == 0:
+        return (0, 0, 0, 0, 0, 0)
+
+    zmin, rmin, cmin = coords.min(axis=0)
+    zmax, rmax, cmax = coords.max(axis=0)
+
+    # Padding en voxeles (redondeado). OJO: spacing[0]=col, spacing[1]=row, spacing[2]=slice
+    # numpy: (z, y, x) = (slice, row, col)
+    pad_z = int(padding_mm / spacing[2]) if spacing[2] > 0 else 1
+    pad_r = int(padding_mm / spacing[1]) if spacing[1] > 0 else 1
+    pad_c = int(padding_mm / spacing[0]) if spacing[0] > 0 else 1
+
+    # Aplicar padding con clamps a bordes
+    zmax_s, rmax_s, cmax_s = mask.shape
+    zmin = max(0, zmin - pad_z)
+    rmin = max(0, rmin - pad_r)
+    cmin = max(0, cmin - pad_c)
+    zmax = min(zmax_s - 1, zmax + pad_z)
+    rmax = min(rmax_s - 1, rmax + pad_r)
+    cmax = min(cmax_s - 1, cmax + pad_c)
+
+    return (rmin, rmax, cmin, cmax, zmin, zmax)
+
+
+def _create_empty_tumor_node_fallback(ref_node):
+    """
+    Crea un vtkMRMLSegmentationNode VACIO como fallback
+    si la configuracion del widget MONAI Label falla.
+
+    Args:
+        ref_node: nodo de referencia para geometria (ej: CT)
+
+    Returns:
+        vtkMRMLSegmentationNode con un segmento vacio llamado "Tumor"
     """
     import slicer
-    import numpy as np
-    from vtk.util import numpy_support
-    import vtk
 
-    # Crear nodo de segmentacion
     seg_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
-    seg_name = f"Tumor_SUV_{suv_threshold}" if tumor_mask is not None else f"Tumor_VACIO"
-    seg_node.SetName(seg_name)
+    seg_node.SetName("Tumor_MONAI")
     seg_node.CreateDefaultDisplayNodes()
 
-    if tumor_mask is None or np.sum(tumor_mask) == 0:
-        # Nodo vacio — agregar segmento vacio con nombre
-        empty_color = [1.0, 0.0, 0.0]  # rojo
-        seg_node.GetSegmentation().AddEmptySegment(
-            "Tumor", f"Tumor SUV>{suv_threshold}", empty_color
-        )
-        return seg_node
+    if ref_node is not None:
+        try:
+            seg_node.SetReferenceImageGeometryParameterFromVolumeNode(ref_node)
+            logger.info(f"  Geometria de referencia asignada desde: '{ref_node.GetName()}'")
+        except Exception as e:
+            logger.warning(f"  No se pudo asignar geometria de referencia: {e}")
 
-    # Crear labelmap volume temporal
-    label_node = slicer.mrmlScene.AddNewNodeByClass(
-        "vtkMRMLLabelMapVolumeNode", "__temp_tumor_label__"
+    seg_node.GetSegmentation().AddEmptySegment(
+        "Tumor",
+        "Tumor hepatico (segmentar con MONAI Label)",
+        [1.0, 0.0, 0.0]
     )
 
-    # Copiar geometria del nodo de referencia
-    mat = vtk.vtkMatrix4x4()
-    ref_node.GetIJKToRASMatrix(mat)
-    label_node.SetIJKToRASMatrix(mat)
-    label_node.SetSpacing(ref_node.GetSpacing())
-    label_node.SetOrigin(ref_node.GetOrigin())
-
-    # Convertir numpy a vtkImageData
-    # tumor_mask es (K, J, I) -> vtk espera (I, J, K)
-    tumor_ijk = np.transpose(tumor_mask, (2, 1, 0)).astype(np.uint8)
-    flat = tumor_ijk.ravel(order='C')
-    vtk_arr = numpy_support.numpy_to_vtk(flat, deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
-
-    vtk_img = vtk.vtkImageData()
-    dims = ref_node.GetImageData().GetDimensions()
-    vtk_img.SetDimensions(dims)
-    vtk_img.SetSpacing(ref_node.GetSpacing())
-    vtk_img.SetOrigin(ref_node.GetOrigin())
-    vtk_img.GetPointData().SetScalars(vtk_arr)
-    label_node.SetAndObserveImageData(vtk_img)
-
-    # Importar a segmentation
-    try:
-        slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(
-            label_node, seg_node
-        )
-    except Exception as e:
-        logger.warning(f"  Fallo import labelmap a segmentation: {e}")
-        seg_node.GetSegmentation().AddEmptySegment(
-            "Tumor", f"Tumor SUV>{suv_threshold}", [1.0, 0.0, 0.0]
-        )
-
-    # Limpiar
-    slicer.mrmlScene.RemoveNode(label_node)
-
-    # Renombrar segmento si existe
-    seg = seg_node.GetSegmentation().GetSegment("Tumor")
-    if seg:
-        seg.SetColor(1.0, 0.0, 0.0)
-
+    logger.info(f"  Nodo de tumor vacio creado (fallback): '{seg_node.GetName()}'")
     return seg_node
