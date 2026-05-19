@@ -17,6 +17,7 @@ NO usa SUV threshold.
 
 import logging
 import os
+import numpy as np
 from typing import Optional
 
 logger = logging.getLogger("3DosimTest")
@@ -61,7 +62,6 @@ def prepare_tumor_segmentation(
         RuntimeError: si no se encuentra el higado en la segmentacion
     """
     import slicer
-    import numpy as np
     import vtk
 
     logger.info("")
@@ -180,7 +180,7 @@ def prepare_tumor_segmentation(
     }
 
 
-def _extract_segment_mask(segmentation_node, segment_name: str) -> Optional["np.ndarray"]:
+def _extract_segment_mask(segmentation_node, segment_name: str) -> Optional[np.ndarray]:
     """
     Extrae un segmento especifico de un vtkMRMLSegmentationNode como numpy array.
 
@@ -192,7 +192,6 @@ def _extract_segment_mask(segmentation_node, segment_name: str) -> Optional["np.
         numpy array 3D uint8 con la mascara, o None si no se encuentra
     """
     import slicer
-    import numpy as np
     import vtk
 
     seg = segmentation_node.GetSegmentation()
@@ -291,8 +290,6 @@ def _compute_bbox_with_padding(mask, spacing, padding_mm: float = 10.0):
     Returns:
         tuple: (rmin, rmax, cmin, cmax, zmin, zmax) en coordenadas IJK
     """
-    import numpy as np
-
     # Encontrar voxeles positivos
     coords = np.argwhere(mask > 0)
     if coords.size == 0:
