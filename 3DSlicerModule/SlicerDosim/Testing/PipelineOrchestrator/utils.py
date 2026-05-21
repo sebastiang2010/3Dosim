@@ -12,11 +12,33 @@ def setup_logger(name: str = "3DosimTest") -> logging.Logger:
     """Configura y retorna el logger global."""
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
+    
+    # Consola
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter(
         "[%(asctime)s] %(levelname)-8s %(message)s", datefmt="%H:%M:%S"
     ))
     logger.addHandler(handler)
+
+    # Archivo (si se puede determinar la ruta)
+    try:
+        # Intentar guardar en resultados_test/logs/
+        # Buscamos la raiz del proyecto
+        current = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.abspath(os.path.join(current, "..", "..", "..", ".."))
+        log_dir = os.path.join(base_dir, "resultados_test", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "pipeline.log")
+        
+        file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(message)s"
+        ))
+        logger.addHandler(file_handler)
+        logger.info(f"Log file initialized: {log_file}")
+    except Exception as e:
+        print(f"No se pudo crear file handler para el logger: {e}")
+
     return logger
 
 

@@ -86,8 +86,14 @@ class ConsolaComandos:
     def mostrar(self):
         """Muestra (o crea) la consola como ventana flotante."""
         try:
-            from qt import QDialog, QVBoxLayout, QTextEdit, QLineEdit, \
-                QPushButton, QHBoxLayout, QApplication
+            import qt
+            QDialog = qt.QDialog
+            QVBoxLayout = qt.QVBoxLayout
+            QTextEdit = qt.QTextEdit
+            QPushButton = qt.QPushButton
+            QHBoxLayout = qt.QHBoxLayout
+            QApplication = qt.QApplication
+            QLineEdit = qt.QLineEdit
 
             if self._dialog and self._visible:
                 self._dialog.raise_()
@@ -199,6 +205,22 @@ class ConsolaComandos:
             safe = mensaje.replace("&", "&amp;").replace("<", "&lt;") \
                           .replace(">", "&gt;").replace("\n", "<br>")
             self._output.append(f'<span style="color: #e74c3c;">✗ {safe}</span>')
+            self._scroll_abajo()
+        except Exception:
+            pass
+
+    def log_ai(self, mensaje: str):
+        """Agrega un mensaje de respuesta de IA (cyan)."""
+        if not self._output or not self._visible:
+            logger.info(f"[IA] {mensaje}")
+            return
+        try:
+            safe = mensaje.replace("&", "&amp;").replace("<", "&lt;") \
+                          .replace(">", "&gt;").replace("\n", "<br>")
+            self._output.append(
+                f'<span style="color: #00bcd4; font-style: italic;">'
+                f"[IA] {safe}</span>"
+            )
             self._scroll_abajo()
         except Exception:
             pass

@@ -93,9 +93,20 @@ def _show_tumor_validation_dialog() -> bool:
 
         instrucciones = QLabel(
             '<p style="color:#555; text-align:center; font-size:12px;">'
-            'Revise la segmentacion del tumor (rojo) superpuesta al PET.<br>'
-            'Navegue slices axial/sagital/coronal, ajuste opacidad del PET,<br>'
-            'rote la vista 3D. Luego APROBAR o RECHAZAR.</p>'
+            'MONAI Label ya esta pre-configurado:<br>'
+            '  ✓ CT cargado como volumen de entrada<br>'
+            '  ✓ Nodo "Tumor_MONAI" listo como salida<br>'
+            '  ✓ Modelo DeepEdit seleccionado<br>'
+            '  ✓ Server conectado (http://127.0.0.1:8000)<br>'
+            '<br>'
+            '<b>Para segmentar el tumor:</b><br>'
+            '1. Haga clic en foreground (tumor) en las slices axial/sagital/coronal<br>'
+            '2. Haga clic en background si es necesario<br>'
+            '3. Presione el boton "DeepEdit" en el modulo MONAI Label<br>'
+            '4. Repita hasta que el tumor este correctamente segmentado<br>'
+            '<br>'
+            'Navegue slices, revise en 3D,<br>'
+            'luego APROBAR o RECHAZAR.</p>'
         )
         instrucciones.setAlignment(1)
         instrucciones.setWordWrap(True)

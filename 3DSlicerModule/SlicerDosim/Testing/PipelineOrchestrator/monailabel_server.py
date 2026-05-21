@@ -66,7 +66,7 @@ def _get_python_slicer() -> str:
 def _ensure_app_directory(app_dir: str) -> bool:
     """
     Verifica que app_dir tenga main.py valido.
-    Si no existe, crea un main.py minimo.
+    Si no existe, crea un main.py funcional con DeepEdit.
     """
     main_py = os.path.join(app_dir, "main.py")
     if os.path.exists(main_py):
@@ -76,12 +76,18 @@ def _ensure_app_directory(app_dir: str) -> bool:
     for subdir in ["model", "lib", "logs", "bin"]:
         os.makedirs(os.path.join(app_dir, subdir), exist_ok=True)
 
-    # main.py minimo
-    content = '''from monailabel.interfaces.app import MONAILabelApp
+    # main.py con DeepEdit (placeholder que usa SegResNet si es posible)
+    content = '''import os
+import logging
+from monailabel.interfaces.app import MONAILabelApp
+from monailabel.interfaces.tasks.infer_v2 import InferType
+from monailabel.tasks.infer.deepedit import DeepEdit
+from monai.networks.nets import SegResNet
 
+logger = logging.getLogger(__name__)
 
 class MyApp(MONAILabelApp):
-    """Minimal MONAI Label app for 3Dosim pipeline."""
+    """3Dosim MONAI Label app with DeepEdit support."""
 
     def __init__(self, app_dir, studies, conf):
         super().__init__(
@@ -92,11 +98,24 @@ class MyApp(MONAILabelApp):
         )
 
     def init_infers(self):
-        return {}
+        # Intentar cargar un modelo preentrenado si existe en model/
+        model_path = os.path.join(self.app_dir, "model", "pretrained.pt")
+        
+        # Si no existe, DeepEdit funcionara como un 'blank' segmenter 
+        # que aprende de los clicks del usuario o usa pesos default si se bajan.
+        infers = {
+            "DeepEdit": DeepEdit(
+                path=model_path if os.path.exists(model_path) else None,
+                network=SegResNet(spatial_dims=3, in_channels=2, out_channels=1), # 1 label + clicks
+                labels={"tumor": 1},
+                type=InferType.DEEPEDIT,
+            )
+        }
+        return infers
 '''
     with open(main_py, "w", encoding="utf-8") as f:
         f.write(content)
-    logger.info(f"  Creado main.py minimo en {main_py}")
+    logger.info(f"  Creado main.py con DeepEdit en {main_py}")
 
     # __init__.py
     init_py = os.path.join(app_dir, "__init__.py")
@@ -105,6 +124,22 @@ class MyApp(MONAILabelApp):
             f.write("")
 
     return True
+
+
+def _install_dependencies(python_exe: str):
+    """Instala dependencias criticas si faltan."""
+    deps = ["sortedcontainers", "pytorch-ignite", "expiring-dict"]
+    logger.info("  Verificando dependencias criticas...")
+    for dep in deps:
+        try:
+            subprocess.run(
+                [python_exe, "-m", "pip", "install", dep],
+                capture_output=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            logger.info(f"    ✓ {dep} OK")
+        except Exception as e:
+            logger.warning(f"    ✗ Error instalando {dep}: {e}")
+
 
 # ---------------------------------------------------------------------------
 # Inicio del servidor
@@ -141,10 +176,6 @@ def start_server(
     os.makedirs(_RESULTS_DIR, exist_ok=True)
     os.makedirs(_STUDIES_DIR, exist_ok=True)
 
-    if not _ensure_app_directory(_APP_DIR):
-        logger.error("  No se pudo preparar el directorio de la app")
-        return None
-
     # --- 3. Encontrar PythonSlicer ---
     python_exe = _get_python_slicer()
     logger.info(f"  Usando: {python_exe}")
@@ -153,7 +184,14 @@ def start_server(
         logger.error(f"  PythonSlicer.exe no encontrado: {python_exe}")
         return None
 
-    # --- 4. Comando ---
+    # --- 4. Instalar dependencias y preparar app ---
+    _install_dependencies(python_exe)
+
+    if not _ensure_app_directory(_APP_DIR):
+        logger.error("  No se pudo preparar el directorio de la app")
+        return None
+
+    # --- 5. Comando ---
     cmd = [
         python_exe, "-m", "monailabel.main",
         "start_server",

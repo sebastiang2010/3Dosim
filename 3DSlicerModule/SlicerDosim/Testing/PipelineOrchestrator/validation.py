@@ -13,7 +13,7 @@ logger = logging.getLogger("3DosimTest")
 from PipelineOrchestrator.utils import show_progress
 
 
-def validate_segmentation():
+def validate_segmentation(context="segmentacion"):
     """
     VALIDACION MEDICA OBLIGATORIA.
 
@@ -21,49 +21,72 @@ def validate_segmentation():
     las imagenes, ocultar PET, examinar la segmentacion en 3D, etc.
     Solo cuando hace clic en APROBAR o RECHAZAR se continua.
 
+    Args:
+        context: "fusion" o "segmentacion" — cambia el mensaje del dialogo.
+
     Raises:
-        RuntimeError: Si el medico rechaza la segmentacion
+        RuntimeError: Si el medico rechaza
     """
+    if context == "fusion":
+        titulo = "Fusion CT+PET"
+        msg = (
+            "Un medico debe revisar la fusion CT+PET registrada\n"
+            "antes de continuar con la segmentacion y calculos\n"
+            "dosimetricos."
+        )
+        aprobado_msg = "FUSION APROBADA POR MEDICO"
+        rechazado_msg = "FUSION RECHAZADA"
+    else:
+        titulo = "Segmentacion"
+        msg = (
+            "Un medico debe revisar la segmentacion\n"
+            "antes de continuar con los calculos\n"
+            "dosimetricos."
+        )
+        aprobado_msg = "SEGMENTACION APROBADA POR MEDICO"
+        rechazado_msg = "SEGMENTACION RECHAZADA"
+
     logger.info("")
     logger.info("  ╔════════════════════════════════════════════════════╗")
-    logger.info("  ║   VALIDACION MEDICA REQUERIDA                     ║")
+    logger.info(f"  ║   VALIDACION MEDICA: {titulo:<24} ║")
     logger.info("  ║                                                  ║")
-    logger.info("  ║   Un medico debe revisar la segmentacion         ║")
-    logger.info("  ║   antes de continuar con los calculos            ║")
-    logger.info("  ║   dosimetricos.                                  ║")
+    logger.info(f"  ║   {msg:<49}║")
     logger.info("  ╚════════════════════════════════════════════════════╝")
     logger.info("")
 
-    show_progress("VALIDACION MEDICA PENDIENTE")
+    show_progress(f"VALIDACION MEDICA PENDIENTE: {titulo}")
 
-    approved = _show_validation_dialog()
+    approved = _show_validation_dialog(titulo=titulo, context=context)
 
     if approved:
         logger.info("")
         logger.info("  ╔════════════════════════════════════════════════════╗")
-        logger.info("  ║   SEGMENTACION APROBADA POR MEDICO                ║")
+        logger.info(f"  ║   {aprobado_msg:<43} ║")
         logger.info("  ║   Continuando con el pipeline...                  ║")
         logger.info("  ╚════════════════════════════════════════════════════╝")
         logger.info("")
-        show_progress("Segmentacion aprobada - continuando")
+        show_progress(f"{titulo} aprobada - continuando")
     else:
         logger.info("")
         logger.info("  ╔════════════════════════════════════════════════════╗")
-        logger.info("  ║   SEGMENTACION RECHAZADA                          ║")
+        logger.info(f"  ║   {rechazado_msg:<43} ║")
         logger.info("  ║   Pipeline detenido.                              ║")
-        logger.info("  ║   Corrija la segmentacion y reinicie.             ║")
         logger.info("  ╚════════════════════════════════════════════════════╝")
         logger.info("")
         raise RuntimeError(
-            "Segmentacion rechazada por el medico. "
-            "Corrija la segmentacion y ejecute con --reset para reiniciar."
+            f"{titulo} rechazada por el medico. "
+            "Corrija y ejecute con --reset para reiniciar."
         )
 
 
-def _show_validation_dialog() -> bool:
+def _show_validation_dialog(titulo="Segmentacion", context="segmentacion") -> bool:
     """
     Muestra dialogo NO MODAL — Slicer COMPLETAMENTE operativo.
     El medico navega libremente (slices, ocultar PET, rotar 3D, etc.)
+
+    Args:
+        titulo: Titulo del dialogo.
+        context: "fusion" o "segmentacion" — cambia texto de instrucciones.
 
     Returns:
         True si el medico aprueba, False si rechaza.
@@ -77,19 +100,42 @@ def _show_validation_dialog() -> bool:
 
         # Dialogo NO MODAL sin WindowStaysOnTopHint
         dialog = QDialog(main)
-        dialog.setWindowTitle("3Dosim — Validar Segmentacion")
+        dialog.setWindowTitle(f"3Dosim — Validar {titulo}")
         dialog.setMinimumWidth(450)
         dialog.setModal(False)
 
         layout = QVBoxLayout()
         layout.setSpacing(12)
 
-        titulo = QLabel(
-            '<h3 style="color:#2c3e50; text-align:center;">'
-            '&iquest;La segmentacion es correcta?</h3>'
+        if context == "fusion":
+            pregunta = '&iquest;La fusion CT+PET es correcta?'
+            instrucciones = (
+                'Navegue los cortes axial/sagital/coronal.<br>'
+                'Verifique que PET y CT coincidan anatomicamente.<br>'
+                'Use el slider de opacidad del PET si es necesario.'
+            )
+        else:
+            pregunta = '&iquest;La segmentacion es correcta?'
+            instrucciones = (
+                'Navegue los cortes axial/sagital/coronal.<br>'
+                'Verifique que los organos segmentados sean correctos.<br>'
+                'Use la vista 3D para inspeccionar la segmentacion.'
+            )
+
+        titulo_label = QLabel(
+            f'<h3 style="color:#2c3e50; text-align:center;">{pregunta}</h3>'
         )
-        titulo.setAlignment(1)  # Qt.AlignCenter
-        layout.addWidget(titulo)
+        titulo_label.setAlignment(1)  # Qt.AlignCenter
+        layout.addWidget(titulo_label)
+        
+        # Instrucciones
+        instr_label = QLabel(
+            f'<p style="color:#555; text-align:center; font-size:12px;">'
+            f'{instrucciones}</p>'
+        )
+        instr_label.setAlignment(1)
+        instr_label.setWordWrap(True)
+        layout.addWidget(instr_label)
 
         # Botones lado a lado
         btn_row = QHBoxLayout()

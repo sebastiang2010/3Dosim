@@ -98,6 +98,7 @@ class DeepSeekClient:
                     "HTTP-Referer": "https://github.com/3Dosim/3Dosim",
                     "X-Title": "3Dosim Pipeline",
                 },
+                timeout=30.0,  # timeout de 30s para no colgarse
             )
             self._ready = True
             logger.info(
