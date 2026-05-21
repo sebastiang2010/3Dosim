@@ -8,3 +8,30 @@ __pycache__/
 *.mrb
 *.mrml
 resultados_test/
+.aider*
+
+# Security
+.env
+*.env
+
+# MATLAB auto-save artifacts
+*.asv
+
+# MATLAB binary data files
+*.mat
+
+# Binary documents
+*.xlsx
+*.docx
+*.pdf
+
+# Images
+*.jpg
+*.jpeg
+*.png
+
+# Logs
+*.log
+
+# JVM crash logs
+hs_err_pid*.log
