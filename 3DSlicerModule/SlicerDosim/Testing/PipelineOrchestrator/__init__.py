@@ -7,9 +7,10 @@ Estructura modular que luego se promocionara a SlicerDosimLib/orchestrator/:
   anonymize.py           - Anonimizacion DICOM (pydicom)
   couch_remover.py       - Eliminacion de camilla y aire del CT
   segmentation.py        - TotalSegmentator (TotalSegmentatorLogic.process())
-   validation.py          - Dialogo de validacion medica obligatoria
-   tumor_segmentation.py  - Preparacion ROI hepatica + MONAI Label (tumor)
-   tumor_validation.py    - Dialogo de validacion medica del tumor
+    validation.py          - Dialogo de validacion medica obligatoria
+    tumor_creator.py       - Tumor sintetico esferico (1 cm radio) en higado + higado_sano
+    tumor_segmentation.py  - Preparacion ROI hepatica + MONAI Label (tumor)
+    tumor_validation.py    - Dialogo de validacion medica del tumor
    git_commit.py          - Prompt de commit git al finalizar
    pipeline.py            - PipelineTestOrchestrator: orquesta todos los pasos
    comandos.py            - Consola interactiva de comandos (lenguaje natural)

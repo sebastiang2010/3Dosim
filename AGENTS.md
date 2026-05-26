@@ -715,3 +715,95 @@ El pipeline debe comportarse como una herramienta clinica navegable:
 - Las imagenes son visibles en la vista 3D desde el primer `setup_medical_views()` post-carga
 - Segmentacion visible en 2D (slices) y 3D simultaneamente
 - Layout: ConventionalView (axial/sagital/coronal + 3D)
+
+## Sesion 26-May — Tumor sintetico esferico + higado sano
+
+### Cambios realizados
+
+| Archivo | Cambio |
+|---------|--------|
+| `tumor_creator.py` | NUEVO — `add_synthetic_tumor()`: extrae higado de TS, calcula centroide, crea esfera de 1 cm radio (configurable via `tumor_radius_mm`), agrega segmento rojo "Tumor_Sintetico", y crea "higado_sano" = higado - tumor como segmento verde. Usa `_compute_centroid()`, `_find_nearest_liver_voxel()`, `_create_sphere_mask()` (distancia euclidiana en mm con spacing real), `_add_mask_as_segment()` (vtkOrientedImageData). |
+| `pipeline.py` | MODIFICADO — Agregados pasos `STEP_ADD_TUMOR` y `STEP_HEALTHY_LIVER`. Metodos `_add_synthetic_tumor()` y `_create_healthy_liver()` integrados post-validacion medica. Cada paso con checkpoint, save_scene, screenshot, y setup_medical_views(). |
+| `__init__.py` | Documentacion actualizada con tumor_creator.py |
+
+### Flujo actual del pipeline
+```
+1. check_slicer
+2. load_dicom
+3. remove_couch_air
+4. resample_pet (Elastix rigid)
+5. show_fusion
+6. anonymize
+7. segment_phantom (TotalSegmentator)
+8. validate_segmentation (medico)
+9. add_synthetic_tumor (esfera 1 cm radio en higado → "Tumor_Sintetico" rojo)
+10. create_healthy_liver ("higado_sano" verde = higado - tumor)
+```
+
+### Algoritmo del tumor sintetico
+1. Extraer mascara del higado desde TS via `_extract_segment_mask()`
+2. Calcular centroide con `_compute_centroid()` (promedio de coordenadas de voxeles)
+3. Si centroide cae fuera del higado, `_find_nearest_liver_voxel()` busca el mas cercano
+4. Crear esfera con `_create_sphere_mask()`: distancia euclidiana en mm desde el centro, usando espaciado real del CT (sx, sy, sz)
+5. Intersectar esfera con higado (tumor solo dentro del parenquima hepatico)
+6. Agregar "Tumor_Sintetico" (rojo) como segmento via vtkOrientedImageData
+7. Calcular "higado_sano" = higado & ~tumor, agregar como segmento verde
+
+## Sesion 26-May 17:00 — Pipeline completo: validacion tumor + body TS + labelmap
+
+### Cambios realizados
+
+| Archivo | Cambio |
+|---------|--------|
+| `tumor_validation.py` | MODIFICADO — `_show_tumor_validation_dialog()` ahora acepta `context` parameter para mostrar instrucciones de tumor sintetico vs manual. `validate_tumor_segmentation(context="sintetico")` pasa contexto al dialogo. |
+| `pipeline.py` | MODIFICADO — Agregados 3 pasos: `STEP_VALIDATE_TUMOR` (paso 9 - validacion medica del tumor sintetico), `STEP_SEGMENT_BODY` (paso 11 - TS task='body' para contorno corporal), `STEP_EXPORT_LABELMAP` (paso 12 - exportar NIfTI+NRRD con IDs de tissue_config). Nuevos métodos: `_validate_tumor()`, `_segment_body()`, `_export_labelmap()`. Agregados `self.body_node` y `self.labelmap_dir` a `__init__`. |
+| `AGENTS.md` | Documentacion actualizada |
+
+### Flujo actual del pipeline (12 pasos)
+```
+ 1. check_slicer
+ 2. load_dicom
+ 3. remove_couch_air
+ 4. resample_pet (Elastix rigid)
+ 5. show_fusion
+ 6. anonymize
+ 7. segment_phantom (TotalSegmentator task='total')
+ 8. validate_segmentation (medico)
+ 9. add_synthetic_tumor (esfera 1 cm radio en higado → "Tumor_Sintetico" rojo)
+10. validate_tumor (medico revisa tumor + MONAI)
+11. create_healthy_liver ("higado_sano" verde = higado - tumor)
+12. segment_body (TotalSegmentator task='body' → "Body_Segmentation")
+13. export_labelmap (NIfTI + NRRD con indices tissue_config)
+```
+
+### Detalles de implementacion
+
+**validate_tumor (`_validate_tumor`)**:
+- Llama `tumor_validation.validate_tumor_segmentation(context="sintetico")`
+- Dialogo NO modal: medico navega slices, 3D, opacidad PET
+- Si rechaza: pipeline se detiene con error
+- Guarda checkpoint, escena, screenshot, views
+
+**segment_body (`_segment_body`)**:
+- Segundo TotalSegmentator con task='body' (config en `totalsegmentator_config_body.jsonc`)
+- Crea nodo `Body_Segmentation` separado (no mezcla con nodo organos)
+- Guarda como `self.body_node` para labelmap_exporter
+- Si falla TS: warning, continua sin body
+
+**export_labelmap (`_export_labelmap`)**:
+- Carga `tissue_config.json` desde SlicerDosim/Resources/Config/
+- Asigna indices phantom a cada segmento (30=Tejido_blando, 50=Pulmon, 80=Hueso, 90=Higado, 100=Tumor, etc.)
+- Detecta y resuelve overlaps: ganador = indice mas alto
+- Si body_node disponible, lo incorpora como contorno externo
+- Exporta `3Dosim_labelmap.nii` y `3Dosim_labelmap.nrrd` en `output_dir/labelmaps/`
+
+### Pendiente
+- Probar pipeline completo con `--reset` para verificar todos los cambios
+- Verificar que `setup_medical_views` no acepta `body_node` (confirmado: no lo usa)
+- Si OK, commit
+
+### Archivos modificados en esta sesion
+| Archivo | Cambio |
+|---------|--------|
+| `PipelineOrchestrator/tumor_validation.py` | `_show_tumor_validation_dialog(context)` parameter agregado |
+| `PipelineOrchestrator/pipeline.py` | 3 nuevos pasos + nuevos metodos + atributos `body_node`, `labelmap_dir` |

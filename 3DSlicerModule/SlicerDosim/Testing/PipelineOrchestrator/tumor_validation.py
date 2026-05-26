@@ -13,13 +13,17 @@ logger = logging.getLogger("3DosimTest")
 from PipelineOrchestrator.utils import show_progress
 
 
-def validate_tumor_segmentation():
+def validate_tumor_segmentation(context="sintetico"):
     """
     VALIDACION MEDICA OBLIGATORIA de la segmentacion tumoral.
 
     Dialogo NO modal: el medico puede usar 3D Slicer para navegar
     las imagenes, examinar el tumor en 3D, ajustar ventana PET, etc.
     Solo cuando hace clic en APROBAR o RECHAZAR se continua.
+
+    Args:
+        context: "sintetico" (default) para tumor generado automaticamente,
+                 otro valor para tumor segmentado manualmente.
 
     Raises:
         RuntimeError: Si el medico rechaza la segmentacion tumoral
@@ -36,7 +40,7 @@ def validate_tumor_segmentation():
 
     show_progress("VALIDACION TUMOR PENDIENTE")
 
-    approved = _show_tumor_validation_dialog()
+    approved = _show_tumor_validation_dialog(context=context)
 
     if approved:
         logger.info("")
@@ -46,6 +50,7 @@ def validate_tumor_segmentation():
         logger.info("  ╚════════════════════════════════════════════════════╝")
         logger.info("")
         show_progress("Tumor aprobado - continuando")
+        return True
     else:
         logger.info("")
         logger.info("  ╔════════════════════════════════════════════════════╗")
@@ -60,10 +65,13 @@ def validate_tumor_segmentation():
         )
 
 
-def _show_tumor_validation_dialog() -> bool:
+def _show_tumor_validation_dialog(context="sintetico") -> bool:
     """
     Muestra dialogo NO MODAL para validar segmentacion tumoral.
     Slicer COMPLETAMENTE operativo durante la revision.
+
+    Args:
+        context: "sintetico" o "manual" — cambia las instrucciones.
 
     Returns:
         True si el medico aprueba, False si rechaza.
@@ -91,23 +99,34 @@ def _show_tumor_validation_dialog() -> bool:
         titulo.setAlignment(1)  # Qt.AlignCenter
         layout.addWidget(titulo)
 
-        instrucciones = QLabel(
-            '<p style="color:#555; text-align:center; font-size:12px;">'
-            'MONAI Label ya esta pre-configurado:<br>'
-            '  ✓ CT cargado como volumen de entrada<br>'
-            '  ✓ Nodo "Tumor_MONAI" listo como salida<br>'
-            '  ✓ Modelo DeepEdit seleccionado<br>'
-            '  ✓ Server conectado (http://127.0.0.1:8000)<br>'
-            '<br>'
-            '<b>Para segmentar el tumor:</b><br>'
-            '1. Haga clic en foreground (tumor) en las slices axial/sagital/coronal<br>'
-            '2. Haga clic en background si es necesario<br>'
-            '3. Presione el boton "DeepEdit" en el modulo MONAI Label<br>'
-            '4. Repita hasta que el tumor este correctamente segmentado<br>'
-            '<br>'
-            'Navegue slices, revise en 3D,<br>'
-            'luego APROBAR o RECHAZAR.</p>'
-        )
+        if 'sintetico' in context.lower() or 'synthetic' in context.lower():
+            instrucciones_html = (
+                '<p style="color:#555; text-align:center; font-size:12px;">'
+                'Tumor SINTETICO generado automaticamente:<br>'
+                '  ✓ Esfera de 1 cm radio en el parenquima hepatico<br>'
+                '  ✓ Segmento rojo "Tumor_Sintetico" en la segmentacion<br>'
+                '  ✓ Segmento verde "higado_sano" (higado - tumor)<br>'
+                '<br>'
+                '<b>Revise la ubicacion del tumor:</b><br>'
+                '1. Navegue slices axial/sagital/coronal<br>'
+                '2. Use la vista 3D para inspeccionar el tumor esferico<br>'
+                '3. Verifique que el tumor este DENTRO del higado<br>'
+                '4. Confirme que el tamano (~4.2 cm³) sea razonable<br>'
+                '<br>'
+                'Si el tumor sintetico no es adecuado,<br>'
+                'marque RECHAZAR y ejecute con --reset.<br>'
+                'Luego APROBAR o RECHAZAR.</p>'
+            )
+        else:
+            instrucciones_html = (
+                '<p style="color:#555; text-align:center; font-size:12px;">'
+                'Revise la segmentacion tumoral:<br>'
+                'Navegue slices axial/sagital/coronal.<br>'
+                'Use la vista 3D para inspeccionar el tumor.<br>'
+                '<br>'
+                'Luego APROBAR o RECHAZAR.</p>'
+            )
+        instrucciones = QLabel(instrucciones_html)
         instrucciones.setAlignment(1)
         instrucciones.setWordWrap(True)
         layout.addWidget(instrucciones)

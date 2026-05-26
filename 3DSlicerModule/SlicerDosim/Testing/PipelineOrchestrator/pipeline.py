@@ -12,6 +12,9 @@ from PipelineOrchestrator import anonymize
 from PipelineOrchestrator import couch_remover
 from PipelineOrchestrator import segmentation
 from PipelineOrchestrator import validation
+from PipelineOrchestrator import tumor_creator
+from PipelineOrchestrator import tumor_validation
+from PipelineOrchestrator import labelmap_exporter
 from PipelineOrchestrator import git_commit
 from PipelineOrchestrator import ai_supervisor
 from PipelineOrchestrator.utils import logger, add_module_path, show_progress
@@ -37,6 +40,11 @@ class PipelineTestOrchestrator:
     STEP_SEGMENT       = "segment_phantom"
     STEP_VALIDATE_AUTO = "validate_segmentation_auto"
     STEP_VALIDATE      = "validate_segmentation"
+    STEP_ADD_TUMOR       = "add_synthetic_tumor"
+    STEP_VALIDATE_TUMOR  = "validate_tumor"
+    STEP_HEALTHY_LIVER   = "create_healthy_liver"
+    STEP_SEGMENT_BODY    = "segment_body"
+    STEP_EXPORT_LABELMAP = "export_labelmap"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
                  no_consola: bool = False, segmenter: str = "simple",
@@ -47,6 +55,7 @@ class PipelineTestOrchestrator:
         self.output_dir = os.path.join(data_dir, "..", "resultados_test")
         self.checkpoint_dir = os.path.join(self.output_dir, ".checkpoints")
         self.anon_dir = os.path.join(self.output_dir, ".anon")
+        self.labelmap_dir = os.path.join(self.output_dir, "labelmaps")
 
         self.results = {"pasos": [], "errores": [], "tiempos": {}}
 
@@ -58,6 +67,7 @@ class PipelineTestOrchestrator:
         self.ct_masked_node = None   # CT sin camilla/aire (para visualizacion)
         self.pet_node = None
         self.segmentation_node = None
+        self.body_node = None
         self.phantom_nifti_path = None
         self.mcnp_path = None
         self.ct_node_name = None
@@ -129,6 +139,12 @@ class PipelineTestOrchestrator:
             self.consola.mostrar()
 
         self._log_consola("Iniciando pipeline...")
+
+        # Cargar escena guardada si existe (para restaurar nodos Slicer)
+        self._load_scene_if_needed()
+        # Si hay segmentacion restaurada, generar modelos 3D
+        if getattr(self, 'segmentation_node', None):
+            self._show_segmentation_3d(self.segmentation_node)
 
         if self._checkpoint_step(self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
                                  self._check_slicer,
@@ -274,6 +290,8 @@ class PipelineTestOrchestrator:
             pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
+        # Generar modelos 3D a partir de la segmentacion
+        self._show_segmentation_3d(self.segmentation_node)
 
         # --- AUTOVALIDACION DE LA SEGMENTACION ---
         if not self._checkpoint_step(self.STEP_VALIDATE_AUTO, "Autochequeo de segmentos",
@@ -319,6 +337,93 @@ class PipelineTestOrchestrator:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
+        # --- PASO: TUMOR SINTETICO ESFERICO EN EL HIGADO ---
+        self._log_consola("Creando tumor sintetico esferico (1 cm radio) en el higado...")
+        if not self._checkpoint_step(self.STEP_ADD_TUMOR, "Tumor sintetico esferico en higado",
+                                      self._add_synthetic_tumor,
+                                      data_func=lambda: {"tumor_radius_mm": 10.0}):
+            logger.warning("Creacion de tumor sintetico fallo, continuando...")
+        self._save_scene("09_tumor_sintetico")
+        self.tomar_screenshot("09_tumor_sintetico")
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            segmentation_node=self.segmentation_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
+
+        # --- PASO: HIGADO SANO = HIGADO - TUMOR ---
+        self._log_consola("Creando higado sano = higado - tumor...")
+        if not self._checkpoint_step(self.STEP_HEALTHY_LIVER, "Higado sano (higado - tumor)",
+                                      self._create_healthy_liver,
+                                      data_func=lambda: {"created": True}):
+            logger.warning("Creacion de higado sano fallo, continuando...")
+        self._save_scene("10_higado_sano")
+        self.tomar_screenshot("10_higado_sano")
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            segmentation_node=self.segmentation_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
+
+        # --- PASO: VALIDACION MEDICA DEL TUMOR ---
+        self._log_consola("Esperando validacion medica del tumor...")
+        if not self._checkpoint_step(self.STEP_VALIDATE_TUMOR, "Validacion medica del tumor",
+                                      self._validate_tumor,
+                                      data_func=lambda: {"context": "sintetico",
+                                                         "timestamp": __import__('datetime').datetime.now().isoformat()}):
+            logger.error("Validacion tumoral rechazada. Pipeline detenido.")
+            self._log_consola("Validacion tumoral RECHAZADA. Pipeline detenido.")
+            self._report()
+            return
+        self._save_scene("11_validacion_tumor")
+        self.tomar_screenshot("11_validacion_tumor")
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            segmentation_node=self.segmentation_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
+
+        # --- PASO: SEGMENTACION CORPORAL (TotalSegmentator task='body') ---
+        self._log_consola("Segmentando contorno corporal con TotalSegmentator (task='body')...")
+        if not self._checkpoint_step(self.STEP_SEGMENT_BODY, "Segmentacion corporal (body)",
+                                      self._segment_body,
+                                      data_func=lambda: {"task": "body",
+                                                         "fast": True,
+                                                         "force_cpu": True}):
+            logger.warning("Segmentacion corporal fallo, continuando sin body...")
+        self._save_scene("12_segment_body")
+        self.tomar_screenshot("12_segment_body")
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            segmentation_node=self.segmentation_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
+
+        # --- PASO: EXPORTAR LABELMAP CON IDs DE TISSUE_CONFIG ---
+        self._log_consola("Exportando labelmap dosimetrica con IDs de tissue_config...")
+        if not self._checkpoint_step(self.STEP_EXPORT_LABELMAP, "Exportar labelmap dosimetrica",
+                                      self._export_labelmap,
+                                      data_func=lambda: {"output_dir": self.labelmap_dir}):
+            logger.warning("Exportacion de labelmap fallo, continuando...")
+        self._save_scene("13_labelmap_exportada")
+        self.tomar_screenshot("13_labelmap_exportada")
+
         logger.info("")
         logger.info("")
         logger.info("  PIPELINE COMPLETO")
@@ -329,8 +434,13 @@ class PipelineTestOrchestrator:
         logger.info("    3. Re-muestreo PET")
         logger.info("    4. Fusion CT+PET")
         logger.info("    5. Anonimizar")
-        logger.info("    6. TotalSegmentator")
+        logger.info("    6. TotalSegmentator (task=total)")
         logger.info("    7. Validacion segmentacion")
+        logger.info("    8. Tumor sintetico esferico (1 cm radio en higado)")
+        logger.info("    9. Validacion medica del tumor")
+        logger.info("   10. Higado sano = higado - tumor")
+        logger.info("   11. TotalSegmentator (task=body - contorno corporal)")
+        logger.info("   12. Exportar labelmap dosimetrica (NIfTI+NRRD)")
         logger.info("")
 
         self._log_consola("Pipeline completado. Generando reporte...")
@@ -534,11 +644,16 @@ class PipelineTestOrchestrator:
         Fundamental para que al retomar desde checkpoint los nodos Slicer
         sigan siendo accesibles.
 
+        Si getNode falla (por renombre post-anonymize), busca nodos
+        escaneando la escena por tipo (vtkMRMLScalarVolumeNode,
+        vtkMRMLSegmentationNode).
+
         Ademas, restaura la visualizacion medica para que el usuario
         pueda ver inmediatamente el estado actual del pipeline.
         """
         if not data:
             return
+        import slicer
         # Mapear datos guardados a atributos del orquestador
         restore_map = {
             "ct_node": "ct_node",
@@ -550,19 +665,60 @@ class PipelineTestOrchestrator:
         }
         for data_key, attr_name in restore_map.items():
             if data_key in data and data[data_key] is not None:
-                # Si es un nombre de nodo, buscar en escena Slicer
                 if data_key.endswith("_name"):
-                    import slicer
                     try:
                         node = slicer.util.getNode(data[data_key])
-                        # Mapear ct_node_name -> ct_node
                         actual_attr = data_key.replace("_name", "_node")
                         if hasattr(self, actual_attr):
                             setattr(self, actual_attr, node)
                     except Exception:
-                        setattr(self, attr_name, data[data_key])
+                        # Fallback: escanear escena por tipo
+                        self._restore_node_by_type(data_key, data[data_key])
                 else:
                     setattr(self, attr_name, data[data_key])
+
+    def _restore_node_by_type(self, data_key: str, node_name: str):
+        """Busca un nodo en la escena por tipo cuando getNode falla.
+        Asigna al atributo correspondiente del orquestador."""
+        import slicer
+        type_map = {
+            "ct_node": "vtkMRMLScalarVolumeNode",
+            "pet_node": "vtkMRMLScalarVolumeNode",
+            "segmentation_node": "vtkMRMLSegmentationNode",
+            "ct_node_name": "vtkMRMLScalarVolumeNode",
+            "pet_node_name": "vtkMRMLScalarVolumeNode",
+            "ct_masked_node_name": "vtkMRMLScalarVolumeNode",
+        }
+        node_type = type_map.get(data_key, "vtkMRMLScalarVolumeNode")
+        # Buscar por tipo en la escena
+        nodes = slicer.util.getNodesByClass(node_type)
+        if not nodes:
+            logger.warning(f"  No se encontraron nodos de tipo {node_type} en escena")
+            return
+        if len(nodes) == 1:
+            chosen = nodes[0]
+        else:
+            # Multiples nodos: preferir por nombre que contenga CT/PET/Seg
+            keywords = {
+                "ct": "CT",
+                "pet": "PET",
+                "seg": "Seg",
+                "masked": "sin_camilla",
+            }
+            key = "ct"
+            if "pet" in data_key:
+                key = "pet"
+            elif "seg" in data_key:
+                key = "seg"
+            elif "masked" in data_key:
+                key = "masked"
+            kw = keywords.get(key, key)
+            candidates = [n for n in nodes if kw in n.GetName()]
+            chosen = candidates[0] if candidates else nodes[0]
+        attr = data_key.replace("_name", "_node") if data_key.endswith("_name") else data_key
+        if hasattr(self, attr):
+            setattr(self, attr, chosen)
+            logger.info(f"  Nodo restaurado por busqueda: '{chosen.GetName()}' -> self.{attr}")
 
         # Restaurar visualizacion medica si hay nodos disponibles
         if self.ct_node or self.pet_node:
@@ -707,6 +863,135 @@ class PipelineTestOrchestrator:
             logger.warning(f"  No se pudo tomar screenshot '{nombre}': {e}")
             self._log_consola_error(f"Screenshot fallo: {nombre} — {e}")
             return None
+
+    def _load_scene_if_needed(self):
+        """Carga la escena MRB guardada si hay checkpoints completados.
+        
+        Al reanudar pipeline con Slicer fresco, la escena debe cargarse
+        para que los nodos (CT, PET, segmentacion) esten disponibles.
+        Despues de cargar, escanea la escena para asignar nodos criticos
+        a self.ct_node, self.ct_masked_node, self.pet_node, self.segmentation_node.
+        """
+        import slicer
+        scene_path = os.path.join(self.scene_output_dir, "3Dosim_scene.mrb")
+        if not os.path.exists(scene_path):
+            return
+        # Solo cargar si hay checkpoints que necesiten nodos
+        checkpoint_keys = [
+            self.STEP_LOAD_DICOM, self.STEP_REMOVE_COUCH,
+            self.STEP_RESAMPLE_PET, self.STEP_SEGMENT,
+        ]
+        needs_restore = any(
+            self.checkpoint.is_completed(k) for k in checkpoint_keys
+        )
+        if not needs_restore:
+            return
+        logger.info(f"  Cargando escena guardada desde checkpoint: {scene_path}")
+        try:
+            success = slicer.util.loadScene(scene_path)
+            if success:
+                logger.info(f"  Escena cargada OK desde checkpoint")
+            else:
+                logger.warning(f"  loadScene devolvio False")
+        except Exception as e:
+            logger.warning(f"  No se pudo cargar escena: {e}")
+        # Escanear la escena para restaurar nodos criticos
+        self._scan_scene_for_nodes()
+
+    def _scan_scene_for_nodes(self):
+        """Escanea la escena de Slicer y asigna nodos criticos a self.
+        
+        Busca nodos por tipo y nombre keywords:
+          CT_anon -> self.ct_node
+          PET_anon -> self.pet_node
+          CT_sin_camilla -> self.ct_masked_node
+          TotalSegmentator_Seg/Segmentation -> self.segmentation_node
+        """
+        import slicer
+        import vtk
+
+        # Buscar volumenes escalares
+        vol_nodes = slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode")
+        seg_nodes_list = slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
+
+        logger.info(f"  Escaneando escena: {len(vol_nodes)} volumenes, {len(seg_nodes_list)} segmentaciones")
+
+        # Asignar CT: preferir "CT_anon" o "CT_sin_camilla" o cualquier CT
+        ct_candidates = [n for n in vol_nodes if "CT" in n.GetName() or "ct" in n.GetName().lower()]
+        if ct_candidates and not getattr(self, 'ct_node', None):
+            self.ct_node = ct_candidates[0]
+            logger.info(f"  Nodo CT restaurado: '{self.ct_node.GetName()}'")
+
+        # Asignar CT_masked: "sin_camilla" o "masked"
+        masked_candidates = [n for n in vol_nodes if "sin_camilla" in n.GetName().lower() or "masked" in n.GetName().lower()]
+        if not masked_candidates:
+            # Si no hay nodo sin_camilla, usar CT_anon como masked
+            masked_candidates = ct_candidates
+        if masked_candidates and not getattr(self, 'ct_masked_node', None):
+            self.ct_masked_node = masked_candidates[0]
+            logger.info(f"  Nodo CT_masked restaurado: '{self.ct_masked_node.GetName()}'")
+
+        # Asignar PET: preferir "PET_anon" o "PET" 
+        pet_candidates = [n for n in vol_nodes if "PET" in n.GetName() or "pet" in n.GetName().lower()]
+        if pet_candidates and not getattr(self, 'pet_node', None):
+            self.pet_node = pet_candidates[0]
+            logger.info(f"  Nodo PET restaurado: '{self.pet_node.GetName()}'")
+
+        # Asignar segmentacion (organos + tumor)
+        if seg_nodes_list and not getattr(self, 'segmentation_node', None):
+            # Preferir el que tiene mas segmentos o el que dice "TotalSegmentator"
+            ts_candidates = [n for n in seg_nodes_list if "TotalSegmentator" in n.GetName()]
+            self.segmentation_node = ts_candidates[0] if ts_candidates else seg_nodes_list[0]
+            logger.info(f"  Nodo segmentacion restaurado: '{self.segmentation_node.GetName()}'")
+            # Contar segmentos
+            seg_ids = vtk.vtkStringArray()
+            self.segmentation_node.GetSegmentation().GetSegmentIDs(seg_ids)
+            logger.info(f"    Segmentos: {seg_ids.GetNumberOfValues()}")
+
+        # Asignar body_node si existe
+        body_candidates = [n for n in seg_nodes_list if "Body" in n.GetName()]
+        if body_candidates and not getattr(self, 'body_node', None):
+            self.body_node = body_candidates[0]
+            logger.info(f"  Nodo Body restaurado: '{self.body_node.GetName()}'")
+
+    def _show_segmentation_3d(self, seg_node=None):
+        """Crea representacion 3D (closed surface) para todos los segmentos.
+        
+        Hace visible la segmentacion en la vista 3D como modelos
+        de superficie cerrada con sus colores originales.
+        
+        Args:
+            seg_node: nodo de segmentacion. Si None, usa self.segmentation_node.
+        """
+        import slicer
+        import vtk
+        seg_node = seg_node or getattr(self, 'segmentation_node', None)
+        if not seg_node:
+            logger.warning("  No hay nodo de segmentacion para mostrar en 3D")
+            return
+
+        seg_ids = vtk.vtkStringArray()
+        seg_node.GetSegmentation().GetSegmentIDs(seg_ids)
+        n = seg_ids.GetNumberOfValues()
+
+        logger.info(f"  Generando modelos 3D para {n} segmentos...")
+
+        try:
+            # Crear representacion closed surface para todos los segmentos
+            # (esto permite la visualizacion 3D nativa en Slicer)
+            seg_node.CreateClosedSurfaceRepresentation()
+
+            # Asegurar que todos los segmentos sean visibles
+            disp_node = seg_node.GetDisplayNode()
+            if disp_node:
+                try:
+                    disp_node.SetAllSegmentsVisible(True)
+                except AttributeError:
+                    pass
+        except Exception as e:
+            logger.warning(f"  No se pudo generar representacion 3D (no critico): {e}")
+
+        logger.info(f"  Segmentacion visible en vista 3D: {n} segmentos")
 
     def _save_scene(self, tag: str = None) -> "str | None":
         """Guarda la escena actual de Slicer en formato .mrb (comprimido).
@@ -1181,6 +1466,296 @@ class PipelineTestOrchestrator:
             # Fallback: si el dialogo Qt falla, auto-aprobar para no bloquear
             logger.warning("  Fallback: auto-aprobando (dialogo no disponible)")
             return True
+
+    # ==================================================================
+    # TUMOR SINTETICO + HIGADO SANO
+    # ==================================================================
+
+    def _add_synthetic_tumor(self):
+        """Crea un tumor esferico sintetico de 1 cm radio en el higado."""
+        import slicer
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Creando tumor sintetico esferico en el higado...")
+        logger.info("  ========================================================")
+
+        tumor_creator.add_synthetic_tumor(
+            segmentation_node=self.segmentation_node,
+            ct_node=self.ct_node,
+            tumor_radius_mm=10.0,
+            liver_segment_name="liver",
+        )
+
+        logger.info("  ========================================================")
+
+    def _create_healthy_liver(self):
+        """Crea higado sano = higado - tumor.
+        Ya fue creado por add_synthetic_tumor(), este paso verifica existencia."""
+        import slicer
+        import vtk
+
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Verificando higado sano en la segmentacion...")
+        logger.info("  ========================================================")
+
+        seg_node = self.segmentation_node
+        if seg_node is None:
+            logger.error("  No hay nodo de segmentacion")
+            return
+
+        seg_ids = vtk.vtkStringArray()
+        seg_node.GetSegmentation().GetSegmentIDs(seg_ids)
+
+        found_tumor = False
+        found_healthy = False
+        for i in range(seg_ids.GetNumberOfValues()):
+            sid = seg_ids.GetValue(i)
+            segment = seg_node.GetSegmentation().GetSegment(sid)
+            if segment:
+                name = segment.GetName()
+                if "Tumor_Sintetico" in name:
+                    found_tumor = True
+                if "higado_sano" in name:
+                    found_healthy = True
+
+        if found_tumor:
+            logger.info("  [OK] Segmento 'Tumor_Sintetico' presente")
+        else:
+            logger.warning("  Segmento 'Tumor_Sintetico' NO encontrado")
+
+        if found_healthy:
+            logger.info("  [OK] Segmento 'higado_sano' presente")
+            logger.info("  higado_sano = higado - tumor verificado")
+        else:
+            logger.warning("  Segmento 'higado_sano' NO encontrado")
+
+        logger.info("  ========================================================")
+
+    # ==================================================================
+    # VALIDACION MEDICA DEL TUMOR
+    # ==================================================================
+
+    def _validate_tumor(self):
+        """Solicita validacion medica del tumor sintetico."""
+        import slicer
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Validacion medica del tumor...")
+        logger.info("  ========================================================")
+
+        ok = tumor_validation.validate_tumor_segmentation(context="sintetico")
+        if ok:
+            logger.info("  [OK] Tumor validado por el medico")
+        else:
+            logger.error("  Tumor RECHAZADO por el medico")
+            raise RuntimeError("Validacion tumoral rechazada por el medico")
+
+        logger.info("  ========================================================")
+
+    # ==================================================================
+    # SEGMENTACION CORPORAL (TotalSegmentator task='body')
+    # ==================================================================
+
+    def _segment_body(self):
+        """Ejecuta TotalSegmentator con task='body' para contorno corporal."""
+        import slicer
+        import vtk
+        import json
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Segmentando contorno corporal...")
+        logger.info("  ========================================================")
+
+        ct_node = getattr(self, 'ct_node', None)
+        if not ct_node:
+            logger.warning("  ct_node no disponible, usando ct_masked_node...")
+            ct_node = getattr(self, 'ct_masked_node', None)
+        if not ct_node:
+            raise RuntimeError("Nodo CT no disponible para segmentacion corporal")
+
+        # Cargar config body o defaults
+        body_config = {}
+        body_config_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "totalsegmentator_config_body.jsonc"
+        )
+        if os.path.exists(body_config_path):
+            try:
+                import json5
+                with open(body_config_path, "r", encoding="utf-8") as f:
+                    body_config = json5.load(f)
+                logger.info(f"  Config body cargada: {body_config_path}")
+            except Exception as e:
+                logger.warning(f"  No se pudo cargar config body: {e}")
+                body_config = {}
+
+        task = body_config.get("task", "body")
+        fast = body_config.get("fast", True)
+        force_cpu = body_config.get("force_cpu", True)
+        subset = body_config.get("subset", None)
+
+        # Crear nodo de segmentacion para body
+        body_seg_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Body_Segmentation")
+        body_seg_node.CreateDefaultDisplayNodes()
+
+        logger.info(f"  Ejecutando TotalSegmentator task='{task}' para contorno corporal...")
+
+        # Usar TotalSegmentatorLogic.process() directamente (como en segmentation.py)
+        slicer.util.selectModule("TotalSegmentator")
+        from TotalSegmentator import TotalSegmentatorLogic
+        logic = TotalSegmentatorLogic()
+        logic.setupPythonRequirements()
+        logic.process(
+            inputVolume=ct_node,
+            outputSegmentation=body_seg_node,
+            task=task,
+            fast=fast,
+            cpu=force_cpu,
+            subset=subset,
+        )
+
+        # Guardar como self.body_node para referencia posterior
+        self.body_node = body_seg_node
+        logger.info(f"  Body segmentado: {body_seg_node.GetName()}")
+
+        # Verificar que hay segmentos
+        seg_ids = vtk.vtkStringArray()
+        body_seg_node.GetSegmentation().GetSegmentIDs(seg_ids)
+        n = seg_ids.GetNumberOfValues()
+        logger.info(f"  Segmentos corporales encontrados: {n}")
+        for i in range(n):
+            sid = seg_ids.GetValue(i)
+            seg = body_seg_node.GetSegmentation().GetSegment(sid)
+            if seg:
+                logger.info(f"    - {seg.GetName()}")
+
+        logger.info("  ========================================================")
+
+    # ==================================================================
+    # EXPORTAR LABELMAP DOSIMETRICA
+    # ==================================================================
+
+    def _export_labelmap(self):
+        """Exporta labelmap dosimetrica con IDs de tissue_config.json."""
+        import slicer
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Exportando labelmap dosimetrica...")
+        logger.info("  ========================================================")
+
+        ct_node = getattr(self, 'ct_node', None) or getattr(self, 'ct_masked_node', None)
+        seg_node = getattr(self, 'segmentation_node', None)
+        body_node = getattr(self, 'body_node', None)
+
+        if not seg_node:
+            raise RuntimeError("Nodo de segmentacion no disponible para exportar labelmap")
+
+        if not ct_node:
+            raise RuntimeError("Nodo CT no disponible para geometria de labelmap")
+
+        # Crear directorio de salida
+        labelmap_dir = getattr(self, 'labelmap_dir', None)
+        if not labelmap_dir:
+            labelmap_dir = os.path.join(self.output_dir, "labelmaps")
+            self.labelmap_dir = labelmap_dir
+        os.makedirs(labelmap_dir, exist_ok=True)
+
+        logger.info(f"  Directorio de labelmaps: {labelmap_dir}")
+
+        # Cargar tissue_config
+        # __file__ = .../SlicerDosim/Testing/PipelineOrchestrator/pipeline.py
+        # Subir 2 niveles: Testing/PipelineOrchestrator/ -> SlicerDosim/
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        tissue_config_path = os.path.join(
+            base_dir,
+            "Modules", "Scripted", "SlicerDosim",
+            "Resources", "Config", "tissue_config.json"
+        )
+        if not os.path.exists(tissue_config_path):
+            # Fallback: buscar relativo a PipelineOrchestrator
+            tissue_config_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..", "..",
+                "Modules", "Scripted", "SlicerDosim",
+                "Resources", "Config", "tissue_config.json"
+            )
+
+        logger.info(f"  Tissue config: {tissue_config_path}")
+
+        resultado = labelmap_exporter.export_labelmap(
+            segmentation_node=seg_node,
+            ct_node=ct_node,
+            tissue_config_path=tissue_config_path,
+            output_dir=labelmap_dir,
+            body_segmentation_node=body_node,
+        )
+
+        # Mostrar dialogo informativo con resumen de la exportacion
+        self._show_labelmap_summary(resultado)
+
+        logger.info("  ========================================================")
+
+    def _show_labelmap_summary(self, resultado):
+        """Dialogo informativo con resumen de la labelmap exportada."""
+        try:
+            from qt import QLabel, QVBoxLayout, QDialog, QPushButton, QHBoxLayout
+            from qt import QTextEdit, QFont
+            import slicer
+            app = slicer.app
+
+            dlg = QDialog(slicer.util.mainWindow())
+            dlg.setWindowTitle("Labelmap Dosimetrica Exportada")
+            dlg.setMinimumWidth(550)
+            dlg.setMinimumHeight(400)
+
+            layout = QVBoxLayout(dlg)
+
+            titulo = QLabel("<b>Labelmap dosimetrica exportada exitosamente</b>")
+            titulo.setStyleSheet("font-size: 14px; padding: 8px;")
+            layout.addWidget(titulo)
+
+            info = QTextEdit()
+            info.setReadOnly(True)
+            info.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; padding: 8px;")
+            font = QFont("Consolas", 10)
+            info.setFont(font)
+
+            nifti = resultado.get("nifti_path") or "N/A"
+            nrrd = resultado.get("nrrd_path") or "N/A"
+            segs = resultado.get("num_segments", 0)
+            overlaps = resultado.get("overlap_voxels", 0)
+            indices = resultado.get("phantom_indices_used", [])
+
+            texto = (
+                f"Segmentos procesados:  {segs}\n"
+                f"Indices phantom:       {indices}\n"
+                f"Overlap voxels:        {overlaps}\n"
+                f"\n"
+                f"NIfTI:\n  {nifti}\n\n"
+                f"NRRD:\n  {nrrd}\n"
+            )
+            info.setText(texto)
+            layout.addWidget(info)
+
+            # Boton OK
+            btn_layout = QHBoxLayout()
+            btn_layout.addStretch()
+            ok_btn = QPushButton("OK")
+            ok_btn.setMinimumWidth(120)
+            ok_btn.setStyleSheet("font-size: 13px; padding: 6px 20px;")
+            ok_btn.clicked.connect(dlg.accept)
+            btn_layout.addWidget(ok_btn)
+            btn_layout.addStretch()
+            layout.addLayout(btn_layout)
+
+            dlg.setModal(True)
+            dlg.show()
+            dlg.raise_()
+            dlg.activateWindow()
+            dlg.exec_()
+        except Exception as e:
+            logger.warning(f"  No se pudo mostrar dialogo labelmap: {e}")
 
     # ==================================================================
     # REPORTE
