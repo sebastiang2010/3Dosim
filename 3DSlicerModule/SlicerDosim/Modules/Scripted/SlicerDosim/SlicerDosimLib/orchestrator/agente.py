@@ -16,6 +16,8 @@ Uso:
     state.set_aprobacion_medica(True, "Segmentacion correcta")
 """
 
+from __future__ import annotations
+
 import json
 import os
 import logging
@@ -99,6 +101,7 @@ class AgenteState:
             "created_at": _ahora(),
             "updated_at": _ahora(),
             "status": "idle",
+            "interrupted": False,
             "pipeline_step": None,
             "mcp_connected": False,
             "orden_actual": None,
@@ -119,11 +122,32 @@ class AgenteState:
         }
 
     def _load(self) -> dict:
-        """Carga agente.json del disco, o crea estado inicial."""
+        """Carga agente.json del disco, o crea estado inicial.
+
+        Detecta cortes abruptos: si el estado guardado indica "busy"
+        o "waiting_approval", la sesion anterior se interrumpio.
+        Resetea a "idle" y marca el flag interrupted=True.
+        """
         if os.path.exists(self._filepath):
             try:
                 with open(self._filepath, "r", encoding="utf-8") as f:
                     state = json.load(f)
+                # Detectar corte abrupto: sesion anterior en busy/waiting_approval
+                if state.get("status") in ("busy", "waiting_approval"):
+                    logger.warning(
+                        "Sesion anterior se corto abruptamente "
+                        "(status=%s). Reseteando a idle.",
+                        state.get("status"),
+                    )
+                    state["status"] = "idle"
+                    state["interrupted"] = True
+                    # Si habia una orden en ejecucion, moverla al historial como fallida
+                    if state.get("orden_actual") is not None:
+                        orden = state["orden_actual"]
+                        orden["error"] = "Sesion interrumpida"
+                        orden["timestamp_respuesta"] = _ahora()
+                        state["historial"].append(orden)
+                        state["orden_actual"] = None
                 if state.get("version") == SCHEMA_VERSION:
                     return state
                 logger.warning("Version de agente.json incompatible, reiniciando")

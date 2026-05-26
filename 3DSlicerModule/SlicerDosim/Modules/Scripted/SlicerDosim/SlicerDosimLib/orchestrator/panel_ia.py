@@ -17,15 +17,24 @@ Uso:
     app.run()
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 import threading
 import time
-import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, filedialog
 from datetime import datetime
 from typing import Any
+
+# tkinter solo esta disponible fuera de Slicer (Slicer usa Qt).
+# Slicer no tiene _tkinter, asi que hacemos import condicional.
+try:
+    import tkinter as tk
+    from tkinter import ttk, messagebox, scrolledtext, filedialog
+    TKINTER_AVAILABLE = True
+except ImportError:
+    TKINTER_AVAILABLE = False
 
 from .agente import AgenteState
 from .mcp_client import MCPClient, MCPConnectionError

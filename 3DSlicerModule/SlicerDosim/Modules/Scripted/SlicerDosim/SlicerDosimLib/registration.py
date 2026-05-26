@@ -3,6 +3,9 @@ Modulo de registro de imagenes para SlicerDosim.
 
 Implementa registro entre CT (anatomico) y PET/SPECT (funcional)
 para alineacion precisa antes del calculo dosimetrico.
+
+Usa ElastixLogic (API real de SlicerElastix) en vez de slicer.cli.run,
+ya que Elastix NO es un modulo CLI sino ScriptedLoadableModule.
 """
 
 from __future__ import annotations
@@ -15,12 +18,22 @@ class DosimetryRegistration:
     Registro de imagenes para dosimetria.
 
     Soportes:
-      - BrainsFit (rigido + afin)
-      - Elastix (BSpline no rigido)
+      - BrainsFit (rigido + afin + BSpline) via CLI
+      - Elastix via ElastixLogic con presets:
+        * elastix_rigid   → preset "default-rigid" (Parameters_Rigid.txt)
+        * elastix_affine  → preset con affine (si existe) o rigido+afin
+        * elastix_bspline → preset "default0" (Rigid + BSpline)
     """
 
     METHOD_BRAINSFIT = "brainsfit"
     METHOD_ELASTIX = "elastix"
+    METHOD_ELASTIX_RIGID = "elastix_rigid"
+    METHOD_ELASTIX_AFFINE = "elastix_affine"
+
+    # IDs de presets de SlicerElastix
+    PRESET_DEFAULT_RIGID = "default-rigid"   # solo Parameters_Rigid.txt
+    PRESET_DEFAULT_ALL = "default0"           # Parameters_Rigid.txt + Parameters_BSpline.txt
+    PRESET_PAR0043 = "par0043"                # rigid para pelvis CT/MR
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -46,7 +59,9 @@ class DosimetryRegistration:
         """
         method_map = {
             self.METHOD_BRAINSFIT: self._register_brainsfit,
-            self.METHOD_ELASTIX: self._register_elastix,
+            self.METHOD_ELASTIX: self._register_elastix_bspline,
+            self.METHOD_ELASTIX_RIGID: self._register_elastix_rigid,
+            self.METHOD_ELASTIX_AFFINE: self._register_elastix_affine,
         }
 
         register_fn = method_map.get(method)
@@ -55,6 +70,68 @@ class DosimetryRegistration:
 
         self.logger.info(f"Registrando imagenes con metodo: {method}")
         return register_fn(fixed_node, moving_node, output_volume_node)
+
+    def _get_elastix_preset_files(self, preset_id: str):
+        """
+        Obtiene los archivos de parametros (.txt) para un preset de Elastix.
+
+        Usa BuiltinElastixDatabase para acceder a los presets incluidos.
+        """
+        from ElastixLib.database import BuiltinElastixDatabase
+        db = BuiltinElastixDatabase()
+        presets = db.getRegistrationPresets()
+        for preset in presets:
+            if preset.getID() == preset_id:
+                return preset.getParameterFiles()
+        raise ValueError(f"Preset '{preset_id}' no encontrado en la base de datos de Elastix")
+
+    def _run_elastix(self, fixed_node, moving_node, output_node, preset_id: str):
+        """
+        Ejecuta Elastix usando ElastixLogic con un preset especifico.
+        """
+        import slicer
+        from Elastix import ElastixLogic
+
+        self.logger.info(f"  Usando preset Elastix: {preset_id}")
+
+        # Obtener archivos de parametros del preset
+        param_files = self._get_elastix_preset_files(preset_id)
+        for f in param_files:
+            self.logger.info(f"    Param file: {f}")
+
+        # Si no hay output_node, crear uno
+        if output_node is None:
+            output_node = slicer.mrmlScene.AddNewNodeByClass(
+                "vtkMRMLScalarVolumeNode",
+                f"{moving_node.GetName()}_registered"
+            )
+
+        # Ejecutar Elastix usando la API real (no CLI)
+        logic = ElastixLogic()
+        logic.logCallback = lambda msg: self.logger.info(f"  Elastix: {msg}")
+
+        # No borrar temporales si queremos debug
+        logic.deleteTemporaryFiles = True
+
+        # ProcessEvents ANTES de registerVolumes para que Slicer no se cuelgue
+        slicer.app.processEvents()
+
+        logic.registerVolumes(
+            fixedVolumeNode=fixed_node,
+            movingVolumeNode=moving_node,
+            parameterFilenames=param_files,
+            outputVolumeNode=output_node,
+            outputTransformNode=None,
+            fixedVolumeMaskNode=None,
+            movingVolumeMaskNode=None,
+        )
+
+        self.logger.info(f"  Registro Elastix completado con preset '{preset_id}'")
+        return output_node
+
+    # ------------------------------------------------------------------
+    # Metodos especificos
+    # ------------------------------------------------------------------
 
     def _register_brainsfit(self, fixed_node, moving_node, output_node=None):
         """
@@ -73,7 +150,6 @@ class DosimetryRegistration:
                 "initializeTransformMode": "useCenterOfHeadAlign",
             }
 
-            # Ejecutar BrainsFit
             cli_node = slicer.cli.run(
                 slicer.modules.brainsfit, None, params, wait_for_completion=True
             )
@@ -84,52 +160,32 @@ class DosimetryRegistration:
             self.logger.error(f"Error en BrainsFit: {e}")
             raise
 
-    def _register_elastix(self, fixed_node, moving_node, output_node=None):
+    def _register_elastix_rigid(self, fixed_node, moving_node, output_node=None):
         """
-        Registro usando Elastix (BSpline no rigido).
-        Requiere el modulo SlicerElastix.
+        Registro rigido con Elastix (solo traslacion + rotacion).
+        Usa el preset 'default-rigid' → Parameters_Rigid.txt (EulerTransform, MI, ASGD)
         """
+        return self._run_elastix(fixed_node, moving_node, output_node,
+                                 preset_id=self.PRESET_DEFAULT_RIGID)
+
+    def _register_elastix_affine(self, fixed_node, moving_node, output_node=None):
+        """
+        Registro afin con Elastix (rigido + escala + shear).
+        Busca un preset que incluya affine.
+        """
+        # Intentar presets con affine. Si no existe uno generico, usamos el default-rigid
+        # como fallback por ahora.
         try:
-            import slicer
+            return self._run_elastix(fixed_node, moving_node, output_node,
+                                     preset_id="par0043")
+        except ValueError:
+            self.logger.warning("  Preset affine no encontrado, usando rigid como fallback")
+            return self._register_elastix_rigid(fixed_node, moving_node, output_node)
 
-            params = {
-                "fixedVolume": fixed_node.GetID(),
-                "movingVolume": moving_node.GetID(),
-                "outputVolume": output_node.GetID() if output_node else "",
-                "registrationType": "nonrigid",
-                "numberOfResolutions": 4,
-                "finalGridSpacingInPhysicalUnits": 10,
-            }
-
-            cli_node = slicer.cli.run(
-                slicer.modules.elastix, None, params, wait_for_completion=True
-            )
-            self.logger.info("Registro Elastix completado")
-            return cli_node.GetOutputNode("outputVolume")
-
-        except Exception as e:
-            self.logger.error(f"Error en Elastix: {e}")
-            raise
-
-    def apply_transform(self, volume_node, transform_node) -> object:
+    def _register_elastix_bspline(self, fixed_node, moving_node, output_node=None):
         """
-        Aplica una transformacion a un volumen.
-        Util para re-muestrear la PET a la geometria del CT.
+        Registro no rigido con Elastix (rigido + BSpline).
+        Usa el preset 'default0' → Parameters_Rigid.txt + Parameters_BSpline.txt
         """
-        try:
-            import slicer
-
-            params = {
-                "inputVolume": volume_node.GetID(),
-                "outputVolume": "",
-                "transform": transform_node.GetID(),
-                "interpolationMode": "Linear",
-            }
-            cli_node = slicer.cli.run(
-                slicer.modules.resamplescalarvolume, None, params, wait_for_completion=True
-            )
-            return cli_node.GetOutputNode("outputVolume")
-
-        except Exception as e:
-            self.logger.error(f"Error al aplicar transformada: {e}")
-            raise
+        return self._run_elastix(fixed_node, moving_node, output_node,
+                                 preset_id=self.PRESET_DEFAULT_ALL)

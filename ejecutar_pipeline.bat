@@ -16,9 +16,8 @@ set SLICER_EXE="C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.
 set PIPELINE_SCRIPT="C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py"
 set DATA_DIR="C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2"
 
-:: Elegir segmentador: simple o totalsegmentator
-set SEGMENTER=simple
-:: set SEGMENTER=totalsegmentator
+:: Elegir segmentador: solo totalsegmentator
+set SEGMENTER=totalsegmentator
 
 echo [2/3] Iniciando pipeline con segmentador: %SEGMENTER%
 echo.

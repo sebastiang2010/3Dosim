@@ -7,9 +7,9 @@ con slicer-mcp-server.py (pieper/slicer-skill) o mcp-slicer (zhaoyouj).
 Herramientas expuestas:
     execute_python(code: str) -> dict
         Ejecuta codigo Python en la consola de Slicer.
-    screenshot(view: str = "3D") -> bytes
+    screenshot(view: str = &quot;3D&quot;) -> bytes
         Captura pantalla de una vista de Slicer.
-    list_nodes(filter: str = "") -> list[dict]
+    list_nodes(filter: str = &quot;&quot;) -> list[dict]
         Lista nodos MRML en la escena de Slicer.
     write_file(path: str, content: str) -> bool
         Escribe contenido en un archivo del host.
@@ -17,11 +17,13 @@ Herramientas expuestas:
         Lee contenido de un archivo del host.
 
 Uso:
-    client = MCPClient("http://localhost:2026")
+    client = MCPClient(&quot;http://localhost:2026&quot;)
     client.connect()
-    result = client.execute_python("slicer.app.majorVersion")
-    print(result["output"])
+    result = client.execute_python(&quot;slicer.app.majorVersion&quot;)
+    print(result[&quot;output&quot;])
 """
+
+from __future__ import annotations
 
 import json
 import logging

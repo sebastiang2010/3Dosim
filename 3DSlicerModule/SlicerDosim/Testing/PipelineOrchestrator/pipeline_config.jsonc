@@ -1,0 +1,41 @@
+// 3Dosim Pipeline Orchestrator - Global Configuration
+// =====================================================
+// Configuracion central del pipeline. Toda ruta, flag o parametro
+// debe vivir aqui y no hardcodearse en el codigo.
+//
+// Este archivo se carga al inicializar PipelineTestOrchestrator.
+
+{
+    // Directorio donde se guardan las escenas .mrb (snapshots del estado de Slicer)
+    // Se crea automaticamente si no existe.
+    "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
+
+    // Directorio de output por defecto (relativo a data_dir/../resultados_test)
+    "output_dir_rel": "../resultados_test",
+
+    // Configuracion de visualizacion medica
+    "views": {
+        // Layout de Slicer a usar (ConventionalView = axial/sagital/coronal + 3D)
+        "layout": "ConventionalView",
+        // Opacidad del PET en la fusion (0.0 - 1.0)
+        "pet_opacity": 0.35,
+        // Colormap del PET
+        "pet_colormap": "vtkMRMLColorTableNodeRainbow",
+        // Window/Level para CT
+        "ct_window": 400.0,
+        "ct_level": 40.0,
+        // Window/Level para PET
+        "pet_window": 40.0,
+        "pet_level": 20.0,
+        // Linkear slices (navegacion sincronizada)
+        "link_slices": true
+    },
+
+    // Comportamiento del pipeline
+    "pipeline": {
+        // Forzar validacion medica incluso al restaurar desde checkpoint
+        "force_validation_on_restore": true,
+        // Version del schema de config
+        "config_version": 1
+    }
+}

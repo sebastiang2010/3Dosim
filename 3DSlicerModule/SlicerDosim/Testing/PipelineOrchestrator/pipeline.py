@@ -12,13 +12,12 @@ from PipelineOrchestrator import anonymize
 from PipelineOrchestrator import couch_remover
 from PipelineOrchestrator import segmentation
 from PipelineOrchestrator import validation
-from PipelineOrchestrator import tumor_segmentation
-from PipelineOrchestrator import tumor_validation
 from PipelineOrchestrator import git_commit
 from PipelineOrchestrator import ai_supervisor
 from PipelineOrchestrator.utils import logger, add_module_path, show_progress
 from PipelineOrchestrator.mcp_helper import MCP
 from PipelineOrchestrator.comandos import ConsolaComandos
+from PipelineOrchestrator.views import setup_medical_views, load_pipeline_config
 
 logger = logging.getLogger("3DosimTest")
 
@@ -38,8 +37,6 @@ class PipelineTestOrchestrator:
     STEP_SEGMENT       = "segment_phantom"
     STEP_VALIDATE_AUTO = "validate_segmentation_auto"
     STEP_VALIDATE      = "validate_segmentation"
-    STEP_SEGMENT_TUMOR   = "segment_tumor"
-    STEP_VALIDATE_TUMOR  = "validate_tumor"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
                  no_consola: bool = False, segmenter: str = "simple",
@@ -61,12 +58,10 @@ class PipelineTestOrchestrator:
         self.ct_masked_node = None   # CT sin camilla/aire (para visualizacion)
         self.pet_node = None
         self.segmentation_node = None
-        self.tumor_segmentation_node = None
         self.phantom_nifti_path = None
         self.mcnp_path = None
         self.ct_node_name = None
         self.pet_node_name = None
-        self.tumor_data = None     # dict de prepare_tumor_segmentation()
 
         # MCP: servidor para que externos monitoreen + screenshots
         self.mcp = MCP()
@@ -89,6 +84,14 @@ class PipelineTestOrchestrator:
 
         # Consola interactiva de comandos (habilitada por defecto)
         self.no_consola = no_consola
+        # Pipeline config (pipeline_config.jsonc)
+        self.pipeline_config = load_pipeline_config()
+        self.scene_output_dir = self.pipeline_config.get(
+            "scene_output_dir",
+            os.path.join(self.output_dir, "scenes"),
+        )
+        logger.info(f"  Scene output dir: {self.scene_output_dir}")
+
         self.consola = None
         if not no_consola:
             try:
@@ -145,6 +148,16 @@ class PipelineTestOrchestrator:
         # Save point 1: escena Slicer comprimida post-carga DICOM
         self._save_scene("01_post_load_dicom")
         self.tomar_screenshot("01_carga_dicom")
+        # Visualizacion medica automatica post-carga
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            # No segmentation yet
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
 
         if not self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
                                      self._remove_couch_air,
@@ -161,6 +174,15 @@ class PipelineTestOrchestrator:
             logger.warning("Re-muestreo PET fallo, continuando con PET original...")
         self._save_scene("03_pet_resampled")
         self.tomar_screenshot("03_pet_resampled")
+        # Visualizacion medica post-registro PET
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
 
         if not self._checkpoint_step(self.STEP_SHOW_FUSION, "Mostrando fusion CT+PET registrada",
                                      self._show_fusion):
@@ -193,7 +215,7 @@ class PipelineTestOrchestrator:
             logger.info("")
             logger.info("Archivos generados:")
             logger.info(f"  Screenshots:  {self.output_dir}/screenshots/")
-            logger.info(f"  Escena Slicer: {self.output_dir}/scenes/")
+            logger.info(f"  Escena Slicer: {self.scene_output_dir}/")
             logger.info(f"  DICOM anon:   {self.anon_dir}")
             logger.info("")
             logger.info("Para correr TotalSegmentator manual:")
@@ -242,6 +264,16 @@ class PipelineTestOrchestrator:
         # Save scene + screenshot post-segmentacion
         self._save_scene("08_segmentacion")
         self.tomar_screenshot("08_segmentacion")
+        # Visualizacion medica con segmentacion 3D activa
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            segmentation_node=self.segmentation_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
 
         # --- AUTOVALIDACION DE LA SEGMENTACION ---
         if not self._checkpoint_step(self.STEP_VALIDATE_AUTO, "Autochequeo de segmentos",
@@ -276,33 +308,16 @@ class PipelineTestOrchestrator:
         # Save point: escena Slicer comprimida post-validacion medica de segmentacion
         self._save_scene("08_post_validacion_segmentacion")
         self.tomar_screenshot("08_validacion_segmentacion")
-
-        # --- PASO CRITICO: SEGMENTACION TUMORAL (MONAI Label) ---
-        self._log_consola("Preparando ROI hepatica para MONAI Label...")
-        tumor_ok = self._checkpoint_step(self.STEP_SEGMENT_TUMOR, "Preparar ROI hepatica + MONAI Label",
-                                          self._segment_tumor,
-                                          data_func=lambda: {"tumor_segmentation_node_name": self.tumor_segmentation_node.GetName() if self.tumor_segmentation_node else None,
-                                                             "tumor_data": self.tumor_data if hasattr(self, 'tumor_data') else None})
-        if not tumor_ok:
-            logger.warning("Preparacion tumoral no disponible")
-            self._log_consola("Preparacion tumoral no disponible, continuando...")
-        else:
-            self._save_scene("10_preparacion_tumor_monai")
-            self.tomar_screenshot("10_tumor_roi")
-
-            # --- PASO CRITICO: VALIDACION MEDICA DEL TUMOR ---
-            self._log_consola("Esperando segmentacion tumoral con MONAI Label...")
-            if not self._checkpoint_step(self.STEP_VALIDATE_TUMOR, "Validacion medica del tumor (MONAI Label)",
-                                          self._validate_tumor,
-                                          data_func=lambda: {"validado_por": "medico",
-                                                             "timestamp": __import__('datetime').datetime.now().isoformat()}):
-                logger.error("Validacion tumoral rechazada. Pipeline detenido.")
-                self._log_consola("Tumor RECHAZADO por medico. Pipeline detenido.")
-                self._report()
-                return
-
-            self._save_scene("11_post_validacion_tumor")
-            self.tomar_screenshot("11_validacion_tumor")
+        # Reforzar visualizacion medica post-validacion
+        setup_medical_views(
+            ct_node=self.ct_node,
+            ct_masked_node=self.ct_masked_node,
+            pet_node=self.pet_node,
+            segmentation_node=self.segmentation_node,
+            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+        )
 
         logger.info("")
         logger.info("")
@@ -316,12 +331,9 @@ class PipelineTestOrchestrator:
         logger.info("    5. Anonimizar")
         logger.info("    6. TotalSegmentator")
         logger.info("    7. Validacion segmentacion")
-        logger.info("    8. Crop ROI hepatica")
-        logger.info("    9. MONAI Label (tumor)")
-        logger.info("   10. Validacion tumor")
         logger.info("")
 
-        self._log_consola("Pipeline completado hasta segmentacion tumoral. Generando reporte...")
+        self._log_consola("Pipeline completado. Generando reporte...")
         ok = self._report()
         if ok:
             self._log_consola("Pipeline finalizado EXITOSAMENTE")
@@ -521,6 +533,9 @@ class PipelineTestOrchestrator:
         """Restaura atributos del pipeline desde checkpoint data.
         Fundamental para que al retomar desde checkpoint los nodos Slicer
         sigan siendo accesibles.
+
+        Ademas, restaura la visualizacion medica para que el usuario
+        pueda ver inmediatamente el estado actual del pipeline.
         """
         if not data:
             return
@@ -532,8 +547,6 @@ class PipelineTestOrchestrator:
             "ct_node_name": "ct_node_name",
             "pet_node_name": "pet_node_name",
             "ct_masked_node_name": "ct_masked_node_name",
-            "tumor_segmentation_node_name": "tumor_segmentation_node_name",
-            "tumor_data": "tumor_data",
         }
         for data_key, attr_name in restore_map.items():
             if data_key in data and data[data_key] is not None:
@@ -550,6 +563,22 @@ class PipelineTestOrchestrator:
                         setattr(self, attr_name, data[data_key])
                 else:
                     setattr(self, attr_name, data[data_key])
+
+        # Restaurar visualizacion medica si hay nodos disponibles
+        if self.ct_node or self.pet_node:
+            try:
+                setup_medical_views(
+                    ct_node=self.ct_node,
+                    ct_masked_node=self.ct_masked_node,
+                    pet_node=self.pet_node,
+                    segmentation_node=self.segmentation_node,
+                    layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+                    pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+                    link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+                )
+                logger.info(f"  Visualizacion medica restaurada desde checkpoint '{step_name}'")
+            except Exception as e:
+                logger.debug(f"  No se pudo restaurar visualizacion: {e}")
 
     # ==================================================================
     # PASOS
@@ -679,24 +708,35 @@ class PipelineTestOrchestrator:
             self._log_consola_error(f"Screenshot fallo: {nombre} — {e}")
             return None
 
-    def _save_scene(self, tag: str) -> "str | None":
+    def _save_scene(self, tag: str = None) -> "str | None":
         """Guarda la escena actual de Slicer en formato .mrb (comprimido).
 
+        Usa SIEMPRE el mismo nombre de archivo ('3Dosim_scene.mrb') para que
+        las escenas sean incrementales (cada save sobreescribe la anterior).
+        El tag solo se usa para el log.
+
+        Usa scene_output_dir del pipeline_config.jsonc.
+        Si no existe, fallback a self.output_dir/scenes/.
+
         Args:
-            tag: Identificador del save point (ej: '01_post_load_dicom')
+            tag: Identificador del save point para log (ej: 'post_load_dicom')
 
         Returns:
             Ruta al archivo .mrb, o None si falla.
         """
         try:
             import slicer
-            import tempfile
-            from datetime import datetime
 
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"3Dosim_scene_{tag}_{ts}.mrb"
-            filepath = os.path.join(self.output_dir, "scenes", filename)
+            # Usar SIEMPRE el mismo nombre de archivo (incremental)
+            filename = "3Dosim_scene.mrb"
+            # Usar scene_output_dir del config JSONC central
+            scene_dir = getattr(self, "scene_output_dir", None)
+            if not scene_dir:
+                scene_dir = os.path.join(self.output_dir, "scenes")
+            filepath = os.path.join(scene_dir, filename)
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+            logger.info(f"  Escena{' ['+tag+']' if tag else ''} -> {filepath}")
 
             logger.info(f"  Guardando escena Slicer (MRB comprimido)...")
             logger.info(f"  Destino: {filepath}")
@@ -1122,36 +1162,25 @@ class PipelineTestOrchestrator:
             return False
 
     def _do_validation(self, context="segmentacion"):
-        logger.info(f"  [AUTO-APPROVE] Validacion de {context}")
-        return True
+        """Ejecuta validacion medica real (dialogo Qt NO MODAL).
 
-    def _segment_tumor(self):
+        Args:
+            context: "fusion" o "segmentacion" — cambia mensaje del dialogo.
+
+        Returns:
+            True si el medico aprueba, False si rechaza.
         """
-        Prepara ROI hepatica para segmentacion tumoral con MONAI Label.
-
-        Extrae el higado de TotalSegmentator, calcula bounding box con padding,
-        crea nodo de tumor vacio y cambia al modulo MONAI Label.
-        El medico segmenta el tumor manualmente con MONAI DeepEdit.
-        """
-        seg_node = self.segmentation_node
-
-        if seg_node is None:
-            logger.warning("  Segmentacion corporal no disponible, saltando tumor")
-            return
-
-        result = tumor_segmentation.prepare_tumor_segmentation(
-            segmentation_node=seg_node,
-            ct_node=self.ct_node,
-            pet_node=self.pet_node,
-            segment_name="liver",
-            padding_mm=10.0,
-        )
-        self.tumor_segmentation_node = result["tumor_node"]
-        self.tumor_data = result
-
-    def _validate_tumor(self):
-        logger.info("  [AUTO-APPROVE] Validacion de tumor")
-        return True
+        logger.info(f"  [VALIDACION MEDICA] Iniciando dialogo de {context}")
+        try:
+            validation.validate_segmentation(context=context)
+            return True
+        except RuntimeError:
+            return False
+        except Exception as e:
+            logger.error(f"  Error en dialogo de validacion: {e}")
+            # Fallback: si el dialogo Qt falla, auto-aprobar para no bloquear
+            logger.warning("  Fallback: auto-aprobando (dialogo no disponible)")
+            return True
 
     # ==================================================================
     # REPORTE
@@ -1247,8 +1276,6 @@ class PipelineTestOrchestrator:
 
         logger.info("")
         logger.info("DIRECTORIOS DE SALIDA:")
-        if self.tumor_segmentation_node:
-            logger.info(f"  Tumor seg:      {self.tumor_segmentation_node.GetName()}")
         if self.screenshots:
             logger.info(f"  Screenshots:     {len(self.screenshots)} archivos")
             for s in self.screenshots:

@@ -231,5 +231,487 @@ C:\programas\3Dosim\3Dosim_v_3.14\ejecutar_pipeline.bat
 & "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --reset --segmenter simple
 ```
 
+## AI Supervisor (NUEVO - May 2026)
+Revisión inteligente paso a paso del pipeline usando DeepSeek/OpenRouter.
+
+### Funcionamiento
+- Despues de cada paso exitoso, se recolecta el estado actual del pipeline
+- Se envian metricas a la IA para obtener feedback
+- La respuesta aparece en **cyan** en la consola (no bloquea, va en paralelo)
+- **Pre-verificacion**: reglas duras detectan anomalias antes de consultar a la IA
+
+### Pre-verificacion (reglas de calidad inmediatas)
+| Regla | Que detecta |
+|---|---|
+| Metodo simple (threshold) | Advertir que no es suficiente para dosimetria |
+| Pocos segmentos (<=2) | Threshold sin etiquetado de organos |
+| Voxels fuera del cuerpo | Segmentacion incluye aire/camilla |
+
+### Archivos
+- `ai_supervisor.py` - modulo principal (pre-verificacion + consulta IA)
+- `deepseek_client.py` - cliente OpenRouter (multi-modelo)
+- `comandos.py` - comandos `ai`, `modelo`, `modelos` en consola interactiva
+
+### Archivos nuevos/modificados en rama `ai`
+| Archivo | Cambio |
+|---|---|
+| `ai_supervisor.py` | NUEVO - revision IA post-paso |
+| `comandos.py` | Agregados comandos IA + color cyan para respuestas |
+| `deepseek_client.py` | Agregado timeout 30s |
+| `pipeline.py` | Integrado AI supervisor en cada paso |
+| `quick_test.py` | Script para prueba rapida solo CT+PET + consola |
+
+## Sesion 19-May 15:00 — Cambios realizados
+
+### Resumen de cambios
+
+| Archivo | Cambio |
+|---|---|
+| `tumor_segmentation.py` | Refactor completo: sacado SUV threshold. Nueva funcion `prepare_tumor_segmentation()`: extrae higado de TS, calcula bounding box + padding 10mm, crea nodo de tumor vacio "Tumor_MONAI", cambia al modulo MONAI Label. |
+| `tumor_validation.py` | Dialogo actualizado: instrucciones para usar MONAI Label (DeepEdit) en vez de solo revisar mascara. |
+| `pipeline.py` | Eliminada validacion medica de fusion + eliminados builders (phantom_builder, source_builder, geometry_builder, tally_builder, mcnp_builder) + imports, atributos y steps correspondientes. `_segment_tumor()` ahora llama a `prepare_tumor_segmentation()`. |
+| `agente.py` | Fix corte abrupto: `_load()` detecta status "busy"/"waiting_approval" y resetea a "idle" con flag `interrupted=True`. Agregado campo `interrupted` al estado inicial. |
+| `__init__.py` (PipelineOrchestrator) | Documentacion actualizada. |
+
+### Flujo actual del pipeline
+```
+1. check_slicer
+2. load_dicom
+3. remove_couch_air
+4. resample_pet (Elastix rigid)
+5. show_fusion
+6. anonymize
+7. segment_phantom (TotalSegmentator)
+8. validate_segmentation (medico)
+9. prepare_tumor (crop ROI hepatica + nodo vacio + MONAI Label)
+10. validate_tumor (medico usa MONAI + APROBAR)
+```
+
+### Pendiente
+- Probar pipeline completo dentro de Slicer con Paciente_2
+- MONAI Label debe estar instalado como extension de Slicer + server corriendo
+- Si OK, git commit
+
+## Sesion 19-May 16:30 — Bugfixes post-segunda-prueba
+
+### Cambios realizados
+
+| Archivo | Cambio |
+|---|---|
+| `comandos.py` | Agregado metodo `log_ai()` para mostrar respuestas de IA en color cyan. Antes `ai_supervisor.py:175` tiraba `AttributeError: 'ConsolaComandos' object has no attribute 'log_ai'`. |
+| `pipeline.py` | `_save_scene()`: workaround para error NRRD write por path muy largo en Windows. Antes de guardar, setea TMP/TEMP a `C:\tmp` (path corto), restaura despues. |
+
+### Estado actual
+- **Bug #1 (log_ai)**: RESUELTO — `ConsolaComandos.log_ai()` agregado
+- **Bug #2 (scene MRB)**: RESUELTO — workaround TMP path corto
+- Pipeline listo para prueba completa con `--segmenter totalsegmentator` (sin `--stop-before-segment`)
+
+## Sesion 19-May 12:00 — MONAI Label server auto-start + simplificacion
+
+### Problema
+`tumor_segmentation.py` intentaba usar `MONAILabelWidget` de Slicer, que **no esta instalado**
+(no hay extension MONAI Label en Slicer, solo MONAIAuto3DSeg). Ademas, el servidor MONAI Label
+debia iniciarse manualmente.
+
+### Solucion
+1. **`monailabel_server.py`** (NUEVO): wrapper pragmatico que:
+   - Verifica si el servidor ya corre via `check_server()` (HTTP GET `/info/`)
+   - Si no, crea app minima funcional (`main.py` con `MONAILabelApp` subclass)
+   - Lanza `PythonSlicer.exe -m monailabel.main start_server` como subproceso
+   - Espera hasta timeout a que responda
+   - Devuelve gracefulmente si falla (no bloquea el pipeline)
+
+2. **`tumor_segmentation.py`** (SIMPLIFICADO):
+   - ❌ Eliminado `_configure_monailabel_widget()` (dependia de MONAILabelWidget)
+   - ❌ Eliminado `_check_monailabel_server()` (redundante con `check_server()`)
+   - ✅ Llama `start_server(timeout=30)` al inicio
+   - ✅ Crea nodo de tumor vacio directamente (sin widget)
+   - ✅ Muestra URL http://localhost:8000 si el server arranco
+   - ✅ Da instrucciones manuales si no
+
+3. **`main.py`**: Agregado `'simple'` a `choices` de `--segmenter`
+
+### Server MONAI Label funcional
+```json
+GET http://127.0.0.1:8000/info/
+{
+  "name": "3Dosim DeepEdit",
+  "description": "Liver tumor segmentation with DeepEdit",
+  "labels": ["tumor"],
+  "models": {}
+}
+```
+- **Modelos vacios** (sin DeepEdit real) — suficiente para interfaz web
+- Para DeepEdit real: descargar pesos entrenados y agregar a `init_infers()`
+- Server arranca en **~7 segundos** (testeado)
+
+### Cambios realizados
+
+| Archivo | Cambio |
+|---|---|
+| `monailabel_server.py` | NUEVO — wrapper inicio automatico MONAI Label |
+| `tumor_segmentation.py` | Simplificado: integra `start_server()`, elimina widget |
+| `main.py` | Agregado `'simple'` a segmenter choices |
+| `__init__.py` | Documentacion actualizada |
+
+### Bug conocido
+- **MONAILabelWidget no existe en Slicer**: solo MONAIAuto3DSeg instalado como extension.
+  Para integracion nativa Slicer-MONAILabel, la extension debe instalarse desde Extension Manager.
+  Mientras tanto, el pipeline crea nodo vacio y da instrucciones web.
+
+### Pendiente
+- Probar pipeline completo dentro de Slicer con Paciente_2
+- Para DeepEdit real: descargar modelo pre-entrenado y agregar `InferTask`
+- Si se necesita integracion nativa Slicer: instalar extension MONAI Label
+
+## Sesion 21-May 12:00 — Limpieza general del proyecto
+
+### Resumen de cambios
+Commit: `aed4462` - "cleanup: eliminar builders huerfanos, docs duplicados, pycache, basura"
+
+| Fase | Accion | Archivos |
+|------|--------|----------|
+| Seguridad | `.gitignore` actualizado | Ahora ignora `.env`, `*.mat`, `*.asv`, `*.xlsx`, `*.docx`, `*.pdf`, `*.jpg`, `*.log` |
+| Seguridad | Eliminar `deepseek.env` | Duplicado exacto de `.env` |
+| Seguridad | Eliminar `nul` | Archivo accidental de redireccion shell |
+| Seguridad | Eliminar `pipeline_run.log` | Vacio (0 bytes) |
+| Python | Eliminar 5 builders huerfanos | `phantom_builder.py`, `source_builder.py`, `geometry_builder.py`, `tally_builder.py`, `mcnp_builder.py` |
+| Python | Eliminar wrapper legacy | `Testing/Python/test_pipeline_orchestrator.py` |
+| Python | Remover `__pycache__` de git | 34 archivos `.pyc` eliminados del tracking |
+| Docs | Eliminar MD duplicado | `pipeline_monai_total_segmentator_slicer_dosimetria_hepatica-2.md` (+97 lines extras nada mas) |
+| Docs | Eliminar doc personal | `notebooklm_deepseek_conexion.md` (notas no tecnicas) |
+
+### Pendiente (no resuelto)
+- API key en `.env` expuesta en git history — considerar rotarla en OpenRouter
+- Los directorios MATLAB (`modulo 1/2/3`, `otros/`, `kernel/`, etc.) no se tocaron
+
+### Pendiente (no resuelto)
+- API key en `.env` expuesta en git history — considerar rotarla en OpenRouter
+- Los directorios MATLAB (`modulo 1/2/3`, `otros/`, `kernel/`, etc.) no se tocaron
+
+Commit: `b6aa7a8` - "eliminar test extras fusion_test, fusion_simple, test_ts_standalone, quick_test"
+- Eliminados 4 test extras de PipelineOrchestrator
+- Trackeados ai_supervisor.py, pet_registration.py, pipeline_fusion.py (nuevos)
+- Committed cambios pendientes de sesiones anteriores (8 archivos .py)
+
 ## Comandos utiles
 - `/remember [tag] mensaje` - Guardar progreso en memoria persistente
+# UPDATE_PIPELINE_VISUALIZATION_AND_SCENES.md
+
+## Objetivo
+
+Actualizar el pipeline de `3Dosim` para mejorar persistencia visual, navegacion medica y coherencia del flujo post-TotalSegmentator.
+
+---
+
+# Decision arquitectonica
+
+## IMPORTANTE
+
+NO crear un nuevo `.md`.
+
+Integrar estos cambios dentro de:
+
+* `AGENTS.md`
+
+Porque:
+
+* ya contiene el estado real del proyecto
+* el pipeline evoluciona rapidamente
+* evita divergencia entre documentos
+* el modelo ya usa AGENTS.md como contexto operativo principal
+
+Agregar una nueva seccion:
+
+```md
+## Sesion 22-May — Visualizacion 3D + escenas + validacion
+```
+
+---
+
+# Cambios requeridos
+
+## 1. Persistencia de escenas en JSONC
+
+### Objetivo
+
+Las escenas `.mrb` deben guardarse en:
+
+```txt
+C:\MAT\3Dosim\ai-pipe\imagenes
+```
+
+NO usar rutas hardcodeadas separadas del sistema de configuracion.
+
+La ruta debe integrarse dentro del JSONC global/configuracion persistente del pipeline.
+
+---
+
+## Requerimiento tecnico
+
+Agregar variable nueva:
+
+```jsonc
+{
+  "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes"
+}
+```
+
+Integrarla en:
+
+* config loader
+* checkpoint manager
+* save_scene()
+* pipeline_results.json
+* escenas automaticas
+
+NO duplicar configuraciones.
+
+Toda ruta debe salir del JSONC central.
+
+---
+
+# 2. Visualizacion 3D automatica de cortes
+
+## Objetivo
+
+Despues de:
+
+* carga DICOM
+* fusion PET/CT
+* segmentacion
+* validacion
+
+el usuario debe ver:
+
+* rendering 3D activo
+* slices visibles
+* cortes sincronizados
+
+---
+
+## Requerimientos
+
+Activar automaticamente:
+
+```python
+threeDView.resetFocalPoint()
+```
+
+Mostrar:
+
+* axial
+* sagittal
+* coronal
+* vista 3D
+
+NO dejar solo slices 2D.
+
+---
+
+## Comportamiento esperado
+
+El medico debe poder:
+
+* rotar anatomia
+* navegar cortes
+* inspeccionar organos
+* ver superposicion PET/CT
+* validar segmentacion
+
+sin configuracion manual.
+
+---
+
+# 3. Activar Link Slice View automaticamente
+
+## Objetivo
+
+Sincronizar navegacion entre cortes.
+
+Cuando el medico cambie:
+
+* axial
+* sagittal
+* coronal
+
+las vistas deben mantenerse sincronizadas.
+
+---
+
+## Requerimiento tecnico
+
+Activar automaticamente:
+
+```python
+sliceCompositeNodes = slicer.util.getNodesByClass("vtkMRMLSliceCompositeNode")
+for node in sliceCompositeNodes:
+    node.SetLinkedControl(True)
+```
+
+Debe ejecutarse:
+
+* luego de cargar estudios
+* luego del registro PET/CT
+* luego de segmentacion
+* luego de restaurar checkpoints
+
+---
+
+# 4. Restaurar validacion luego de TS
+
+## Objetivo
+
+Despues de generar anatomia con TotalSegmentator:
+
+* SIEMPRE ejecutar validacion medica
+
+NO continuar automaticamente.
+
+---
+
+## Flujo correcto
+
+```txt
+segment_phantom (TS)
+↓
+visualizacion automatica 3D + slices
+↓
+link slice enabled
+↓
+validate_segmentation (obligatoria)
+↓
+prepare_tumor
+```
+
+---
+
+## IMPORTANTE
+
+La validacion:
+
+* NO debe eliminarse
+* NO debe quedar opcional
+* NO debe bypassarse por checkpoints corruptos
+* debe ejecutarse incluso al restaurar estado
+
+---
+
+# 5. NO avanzar con modulo MCNP
+
+## Decision temporal
+
+NO implementar:
+
+* MCNP builder
+* geometry builder
+* tally builder
+* source builder
+* export MCNP
+* pipelines MCNP
+
+Todo el desarrollo debe enfocarse en:
+
+* visualizacion clinica
+* segmentacion
+* flujo medico
+* validacion
+* persistencia
+* navegacion
+* MONAI workflow
+
+---
+
+## Reglas
+
+Si existe codigo legacy MCNP:
+
+* mantenerlo aislado
+* no expandirlo
+* no integrarlo nuevamente al pipeline actual
+
+No agregar nuevos pasos MCNP.
+
+---
+
+# Recomendaciones de implementacion
+
+## Crear helper centralizado
+
+```python
+setup_medical_views()
+```
+
+Responsabilidades:
+
+* activar layout medico
+* activar 3D
+* activar linked slices
+* reset focal point
+* mostrar segmentaciones
+* restaurar overlays PET/CT
+
+Llamarlo desde:
+
+* load_dicom
+* resample_pet
+* show_fusion
+* segment_phantom
+* validate_segmentation
+* restore checkpoint
+
+---
+
+# Resultado esperado
+
+El pipeline debe comportarse como una herramienta clinica navegable:
+
+* escenas persistentes
+* recuperacion estable
+* visualizacion automatica
+* slices sincronizados
+* validacion medica obligatoria
+* workflow orientado a segmentacion/anatomia
+* sin dependencia MCNP
+
+## Sesion 22-May — Visualizacion 3D + escenas + validacion
+
+### Cambios realizados
+
+| Archivo | Cambio |
+|---------|--------|
+| `pipeline_config.jsonc` | NUEVO — Config central con `scene_output_dir: C:/MAT/3Dosim/ai-pipe/imagenes`, config de vistas (`layout`, `pet_opacity`, `link_slices`, window/level), flags de pipeline |
+| `views.py` | NUEVO — `setup_medical_views()`: helper centralizado que activa layout medico, volume rendering 3D para CT y PET, fusion CT+PET en slices, slices linkeados y reset de focal point. `_enable_volume_rendering()` activa el volume rendering 3D con RayCast para que las imagenes sean visibles en la vista 3D. Tambien `load_pipeline_config()`: carga JSONC con merge profundo y defaults. |
+| `pipeline.py` | MODIFICADO — Importa `views`, carga config al init, usa `scene_output_dir` del JSONC en `_save_scene()`, llama `setup_medical_views()` tras cada paso critico (load_dicom, resample_pet, segment, validate), y al restaurar checkpoint. `_do_validation()` AHORA llama a `validation.validate_segmentation()` real (no mas auto-approve). Eliminadas referencias a tumor (tumor_segmentation, tumor_validation, MONAI). `_save_scene()` ahora usa un solo archivo fijo `3Dosim_scene.mrb` que se sobrescribe en cada save (incremental). |
+| `__init__.py` | Actualizada documentacion con views.py y pipeline_config.jsonc |
+
+### Flujo actual con visualizacion medica
+```
+1. check_slicer
+2. load_dicom          → setup_medical_views() [CT+PET con volume rendering 3D]
+3. remove_couch_air
+4. resample_pet        → setup_medical_views() [fusion actualizada]
+5. show_fusion
+6. anonymize
+7. segment_phantom     → setup_medical_views() [con segmentacion 3D]
+8. validate_segmentation → setup_medical_views() [post-validacion]
+```
+
+### Persistencia
+- `scene_output_dir` configurado en `pipeline_config.jsonc`: `C:/MAT/3Dosim/ai-pipe/imagenes`
+- Una sola escena `.mrb` (`3Dosim_scene.mrb`) que se sobrescribe en cada save point
+- `pipeline_results.json` sigue en `resultados_test/`
+- Config central evita rutas hardcodeadas
+
+### Archivos del sistema de config
+| Archivo | Proposito |
+|---------|-----------|
+| `pipeline_config.jsonc` | Config global del pipeline (rutas, vistas, flags) |
+| `totalsegmentator_config.jsonc` | Config exclusiva de TotalSegmentator (task, fast, subset) |
+| `views.py` | `setup_medical_views()` + `load_pipeline_config()` |
+
+### Volumen rendering 3D
+- `_enable_volume_rendering()` activa automaticamente el volume rendering RayCast para CT y PET
+- Las imagenes son visibles en la vista 3D desde el primer `setup_medical_views()` post-carga
+- Segmentacion visible en 2D (slices) y 3D simultaneamente
+- Layout: ConventionalView (axial/sagital/coronal + 3D)
