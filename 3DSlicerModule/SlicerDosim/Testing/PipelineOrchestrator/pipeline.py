@@ -447,7 +447,6 @@ class PipelineTestOrchestrator:
         ok = self._report()
         if ok:
             self._log_consola("Pipeline finalizado EXITOSAMENTE")
-            git_commit.prompt_git_commit(self.data_dir)
         else:
             self._log_consola("Pipeline finalizado con ERRORES. Revise el reporte.")
 
@@ -1749,11 +1748,11 @@ class PipelineTestOrchestrator:
             btn_layout.addStretch()
             layout.addLayout(btn_layout)
 
-            dlg.setModal(True)
-            dlg.show()
-            dlg.raise_()
-            dlg.activateWindow()
-            dlg.exec_()
+    dlg.setModal(True)
+    dlg.show()
+    dlg.raise_()
+    dlg.activateWindow()
+    result = dlg.exec()
         except Exception as e:
             logger.warning(f"  No se pudo mostrar dialogo labelmap: {e}")
 

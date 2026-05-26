@@ -101,9 +101,10 @@ def _load_tissue_config(config_path: Optional[str] = None) -> dict:
 
 def _build_segment_name_to_phantom(segmentation_node, tissue_config: dict) -> dict:
     """Construye mapeo: nombre_segmento → indice_phantom.
-    
+
     Usa ts_label_to_phantom si el ID del segmento es un label TS numerico.
     Sino, usa DEFAULT_NAME_TO_PHANTOM por nombre.
+    Segmentos no mapeados reciben indices 2-256 (reservando 1 para aire).
     """
     import vtk
 
@@ -115,6 +116,7 @@ def _build_segment_name_to_phantom(segmentation_node, tissue_config: dict) -> di
     name_to_idx = tissue_config.get("_name_to_idx", {})
 
     mapping = {}
+    next_free_idx = 2  # Indices 2-256 para segmentos no tissue
     for i in range(segment_ids.GetNumberOfValues()):
         sid = segment_ids.GetValue(i)
         segment = seg.GetSegment(sid)
@@ -143,8 +145,11 @@ def _build_segment_name_to_phantom(segmentation_node, tissue_config: dict) -> di
                 idx = 80
 
         if idx is None:
-            # Default: Tejido_blando (30)
-            idx = 30
+            # Asignar indice libre 2-256
+            idx = next_free_idx
+            next_free_idx += 1
+            if next_free_idx > 256:
+                logger.warning(f" Segmento '{seg_name}' asignado a indice {idx-1}, se agotaron indices 2-256")
 
         mapping[seg_name] = idx
 
