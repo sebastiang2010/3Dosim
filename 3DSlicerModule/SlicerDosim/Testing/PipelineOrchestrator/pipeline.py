@@ -1,4 +1,4 @@
-﻿"""
+"""
 PipelineTestOrchestrator - Orquesta el pipeline completo 3Dosim en Slicer.
 Todos los imports son absolutos para compatibilidad con Slicer --python-script.
 """
