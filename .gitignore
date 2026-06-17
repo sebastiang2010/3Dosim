@@ -35,3 +35,10 @@ resultados_test/
 
 # JVM crash logs
 hs_err_pid*.log
+
+# Ruflo / AgentDB local state
+.swarm/
+.ruvector/
+ruvector.db
+.claude/memory.db
+.claude/
