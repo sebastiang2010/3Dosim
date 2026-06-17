@@ -40,9 +40,10 @@ class MCNPMaterialMapper:
     ) -> np.ndarray:
         """
         Asigna material MCNP a cada voxel segun su indice phantom.
+        Maneja indices no definidos asignandolos a tejido blando (30).
 
         Args:
-            phantom_arr: array 3D uint8 con indices 3Dosim (1,30,50,80,90,100)
+            phantom_arr: array 3D uint8 con indices 3Dosim
 
         Returns:
             array 3D int32 con IDs de material MCNP (mismo shape)
@@ -55,18 +56,48 @@ class MCNPMaterialMapper:
         self._material_ids_used = set()
         materials_arr = np.zeros(phantom_arr.shape, dtype=np.int32)
 
+        # Procesar cada indice unico
         for idx in unique_indices:
+            # Si el indice es 0 (aire), intentar obtener su material (deberia ser 1)
+            # Si no esta definido, lo dejamos como 0 y lo manejaremos despues
             mat = self.config.get_mcnp_material(int(idx))
-            if mat is None:
-                logger.warning(f"Indice phantom {idx} sin material MCNP definido")
-                continue
-            mat_id = mat["id"]
-            self._material_ids_used.add(mat_id)
-            mask = (phantom_arr == idx)
-            materials_arr[mask] = mat_id
-            n_voxels = int(mask.sum())
-            logger.info(f"  Indice {idx:>3} ({self.config.get_tissue_name(int(idx)):>15}) "
-                        f"-> material {mat_id} ({n_voxels} voxeles)")
+            if mat is not None:
+                mat_id = mat["id"]
+                self._material_ids_used.add(mat_id)
+                mask = (phantom_arr == idx)
+                materials_arr[mask] = mat_id
+                n_voxels = int(mask.sum())
+                logger.info(f"  Indice {idx:>3} ({self.config.get_tissue_name(int(idx)):>15}) "
+                            f"-> material {mat_id} ({n_voxels} voxeles)")
+            else:
+                # Indice no definido en tissue_config.json
+                if idx == 0:
+                    # Aire: asignar a material 1 (vacío) por defecto
+                    logger.warning(f"Indice phantom {idx} (Aire) sin material definido, asignando a material 1")
+                    mask = (phantom_arr == idx)
+                    materials_arr[mask] = 1
+                    self._material_ids_used.add(1)
+                    n_voxels = int(mask.sum())
+                    logger.info(f"  Indice {idx:>3} (Aire) -> material 1 ({n_voxels} voxeles)")
+                else:
+                    # Cualquier otro indice no definido: asignar a tejido blando (30)
+                    logger.warning(f"Indice phantom {idx} sin material definido, asignando a tejido blando (30)")
+                    mask = (phantom_arr == idx)
+                    # Primero obtener el material del tejido blando
+                    soft_tissue_mat = self.config.get_mcnp_material(30)
+                    if soft_tissue_mat is not None:
+                        mat_id = soft_tissue_mat["id"]
+                        self._material_ids_used.add(mat_id)
+                        materials_arr[mask] = mat_id
+                        n_voxels = int(mask.sum())
+                        logger.info(f"  Indice {idx:>3} -> material {mat_id} (tejido blando) ({n_voxels} voxeles)")
+                    else:
+                        # Si incluso el tejido blando no está definido, usar material 1 como fallback
+                        logger.error(f"Tejido blando (30) tampoco está definido, usando material 1 como fallback")
+                        materials_arr[mask] = 1
+                        self._material_ids_used.add(1)
+                        n_voxels = int(mask.sum())
+                        logger.info(f"  Indice {idx:>3} -> material 1 (fallback) ({n_voxels} voxeles)")
 
         return materials_arr
 

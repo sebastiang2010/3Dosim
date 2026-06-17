@@ -1,4 +1,4 @@
-"""
+﻿"""
 PipelineTestOrchestrator - Orquesta el pipeline completo 3Dosim en Slicer.
 Todos los imports son absolutos para compatibilidad con Slicer --python-script.
 """
@@ -45,10 +45,14 @@ class PipelineTestOrchestrator:
     STEP_HEALTHY_LIVER   = "create_healthy_liver"
     STEP_SEGMENT_BODY    = "segment_body"
     STEP_EXPORT_LABELMAP = "export_labelmap"
+    STEP_GENERATE_MCNP   = "generate_mcnp_input"
+    STEP_VALIDATE_MCNP   = "validate_mcnp_params"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
                  no_consola: bool = False, segmenter: str = "simple",
-                 stop_before_segment: bool = False, force_cpu: bool = True):
+                 stop_before_segment: bool = False, force_cpu: bool = True,
+                 mcnp_isotope: str = None, mcnp_n_particles: int = None,
+                 mcnp_refine_hu: bool = False, mcnp_flip_rows: bool = False):
         self.data_dir = data_dir
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
@@ -101,6 +105,19 @@ class PipelineTestOrchestrator:
             os.path.join(self.output_dir, "scenes"),
         )
         logger.info(f"  Scene output dir: {self.scene_output_dir}")
+
+        # Config MCNP (CLI args > config > defaults)
+        mcnp_config = self.pipeline_config.get("mcnp", {})
+        self.mcnp_isotope = mcnp_isotope or mcnp_config.get("isotope", "Y-90")
+        self.mcnp_n_particles = mcnp_n_particles or mcnp_config.get("n_particles", int(1e7))
+        self.mcnp_refine_hu = mcnp_refine_hu or mcnp_config.get("refine_hu", False)
+        self.mcnp_flip_rows = mcnp_flip_rows or mcnp_config.get("flip_rows", False)
+        self.mcnp_output_dir = os.path.join(self.output_dir, "mcnp_input")
+        logger.info(f"  MCNP isotope:     {self.mcnp_isotope}")
+        logger.info(f"  MCNP particles:   {self.mcnp_n_particles:.0e}")
+        logger.info(f"  MCNP refine HU:   {self.mcnp_refine_hu}")
+        logger.info(f"  MCNP flip rows:   {self.mcnp_flip_rows}")
+        logger.info(f"  MCNP output dir:  {self.mcnp_output_dir}")
 
         self.consola = None
         if not no_consola:
@@ -424,6 +441,30 @@ class PipelineTestOrchestrator:
         self._save_scene("13_labelmap_exportada")
         self.tomar_screenshot("13_labelmap_exportada")
 
+        # --- PASO: GENERAR INPUT MCNP ---
+        self._log_consola(f"Generando entrada MCNP (isotopo: {self.mcnp_isotope})...")
+        if not self._checkpoint_step(self.STEP_GENERATE_MCNP, f"Generar input MCNP ({self.mcnp_isotope})",
+                                      self._generate_mcnp_input,
+                                      data_func=lambda: {"mcnp_path": self.mcnp_path,
+                                                         "isotope": self.mcnp_isotope,
+                                                         "n_particles": self.mcnp_n_particles}):
+            logger.error("Generacion de input MCNP fallida.")
+            self._log_consola("ERROR: Generacion MCNP fallida. Pipeline detenido.")
+            self._report()
+            return
+        self._save_scene("14_mcnp_generado")
+        self.tomar_screenshot("14_mcnp_generado")
+
+        # --- PASO: VALIDACION DE PARAMETROS MCNP ---
+        self._log_consola("Mostrando parametros MCNP para revision...")
+        if not self._checkpoint_step(self.STEP_VALIDATE_MCNP, "Validar parametros MCNP",
+                                      self._validate_mcnp_params,
+                                      data_func=lambda: {"validado": True,
+                                                         "timestamp": __import__('datetime').datetime.now().isoformat()}):
+            logger.warning("Validacion de parametros MCNP fallo, continuando...")
+        self._save_scene("15_mcnp_validado")
+        self.tomar_screenshot("15_mcnp_validado")
+
         logger.info("")
         logger.info("")
         logger.info("  PIPELINE COMPLETO")
@@ -441,7 +482,11 @@ class PipelineTestOrchestrator:
         logger.info("   10. Higado sano = higado - tumor")
         logger.info("   11. TotalSegmentator (task=body - contorno corporal)")
         logger.info("   12. Exportar labelmap dosimetrica (NIfTI+NRRD)")
+        logger.info(f"   13. Generar input MCNP ({self.mcnp_isotope}, {self.mcnp_n_particles:.0e} particulas)")
+        logger.info("   14. Validar parametros MCNP")
         logger.info("")
+        if self.mcnp_path:
+            logger.info(f"  Archivo MCNP: {self.mcnp_path}")
 
         self._log_consola("Pipeline completado. Generando reporte...")
         ok = self._report()
@@ -661,6 +706,7 @@ class PipelineTestOrchestrator:
             "ct_node_name": "ct_node_name",
             "pet_node_name": "pet_node_name",
             "ct_masked_node_name": "ct_masked_node_name",
+            "mcnp_path": "mcnp_path",
         }
         for data_key, attr_name in restore_map.items():
             if data_key in data and data[data_key] is not None:
@@ -1690,75 +1736,147 @@ class PipelineTestOrchestrator:
             body_segmentation_node=body_node,
         )
 
-        # Mostrar dialogo informativo con resumen de la exportacion
-        self._show_labelmap_summary(resultado)
-
-        logger.info("  ========================================================")
-
-    def _show_labelmap_summary(self, resultado):
-        """Dialogo informativo con resumen de la labelmap exportada."""
+        # Mostrar dialogo NO MODAL con resumen de la exportacion (permite navegar Slicer)
         try:
-            from qt import QLabel, QVBoxLayout, QDialog, QPushButton, QHBoxLayout
-            from qt import QTextEdit, QFont
+            from qt import QMessageBox
             import slicer
-            app = slicer.app
-
-            dlg = QDialog(slicer.util.mainWindow())
-            dlg.setWindowTitle("Labelmap Dosimetrica Exportada")
-            dlg.setMinimumWidth(550)
-            dlg.setMinimumHeight(400)
-
-            layout = QVBoxLayout(dlg)
-
-            titulo = QLabel("<b>Labelmap dosimetrica exportada exitosamente</b>")
-            titulo.setStyleSheet("font-size: 14px; padding: 8px;")
-            layout.addWidget(titulo)
-
-            info = QTextEdit()
-            info.setReadOnly(True)
-            info.setStyleSheet("font-family: Consolas, monospace; font-size: 12px; padding: 8px;")
-            font = QFont("Consolas", 10)
-            info.setFont(font)
-
+            msg_box = QMessageBox(slicer.util.mainWindow())
+            msg_box.setWindowTitle("Labelmap Dosimetrica Exportada")
+            msg_box.setIcon(QMessageBox.Information)
             nifti = resultado.get("nifti_path") or "N/A"
             nrrd = resultado.get("nrrd_path") or "N/A"
             segs = resultado.get("num_segments", 0)
             overlaps = resultado.get("overlap_voxels", 0)
             indices = resultado.get("phantom_indices_used", [])
-
-            texto = (
-                f"Segmentos procesados:  {segs}\n"
-                f"Indices phantom:       {indices}\n"
-                f"Overlap voxels:        {overlaps}\n"
-                f"\n"
-                f"NIfTI:\n  {nifti}\n\n"
-                f"NRRD:\n  {nrrd}\n"
+            msg_box.setText(
+                f"<b>Labelmap exportada exitosamente</b><br><br>"
+                f"Segmentos procesados: {segs}<br>"
+                f"Indices phantom: {indices}<br>"
+                f"Overlap voxels: {overlaps}<br><br>"
+                f"<b>NIfTI:</b><br>  {nifti}<br><br>"
+                f"<b>NRRD:</b><br>  {nrrd}"
             )
-            info.setText(texto)
-            layout.addWidget(info)
-
-            # Boton OK
-            btn_layout = QHBoxLayout()
-            btn_layout.addStretch()
-            ok_btn = QPushButton("OK")
-            ok_btn.setMinimumWidth(120)
-            ok_btn.setStyleSheet("font-size: 13px; padding: 6px 20px;")
-            ok_btn.clicked.connect(dlg.accept)
-            btn_layout.addWidget(ok_btn)
-            btn_layout.addStretch()
-            layout.addLayout(btn_layout)
-
-    dlg.setModal(True)
-    dlg.show()
-    dlg.raise_()
-    dlg.activateWindow()
-    result = dlg.exec()
+            msg_box.setTextFormat(1)  # Qt.RichText
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            msg_box.setModal(False)
+            msg_box.show()
+            msg_box.raise_()
+            msg_box.activateWindow()
         except Exception as e:
             logger.warning(f"  No se pudo mostrar dialogo labelmap: {e}")
 
+        logger.info("  ========================================================")
+
     # ==================================================================
-    # REPORTE
+    # GENERACION MCNP
     # ==================================================================
+
+    def _generate_mcnp_input(self):
+        """Genera el archivo de entrada MCNP usando MCNPInputGenerator."""
+        import slicer
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Generando entrada MCNP...")
+        logger.info("  ========================================================")
+
+        ct_node = getattr(self, 'ct_node', None) or getattr(self, 'ct_masked_node', None)
+        pet_node = getattr(self, 'pet_node', None)
+        seg_node = getattr(self, 'segmentation_node', None)
+
+        if not ct_node:
+            raise RuntimeError("Nodo CT no disponible para generar MCNP")
+        if not seg_node:
+            raise RuntimeError("Nodo de segmentacion no disponible para generar MCNP")
+
+        # Importar MCNPInputGenerator
+        try:
+            from SlicerDosim.SlicerDosimLib import MCNPInputGenerator
+        except ImportError:
+            from SlicerDosimLib import MCNPInputGenerator
+
+        generator = MCNPInputGenerator()
+
+        logger.info(f"  Isotopo:       {self.mcnp_isotope}")
+        logger.info(f"  Particulas:    {self.mcnp_n_particles:.0e}")
+        logger.info(f"  Refinar HU:    {self.mcnp_refine_hu}")
+        logger.info(f"  Flip rows:     {self.mcnp_flip_rows}")
+        logger.info(f"  CT:            {ct_node.GetName()}")
+        logger.info(f"  PET:           {pet_node.GetName() if pet_node else 'N/A (fuente uniforme)'}")
+        logger.info(f"  Segmentacion:  {seg_node.GetName()}")
+        logger.info(f"  Output dir:    {self.mcnp_output_dir}")
+
+        os.makedirs(self.mcnp_output_dir, exist_ok=True)
+
+        input_path = generator.generate(
+            ct_volume_node=ct_node,
+            pet_volume_node=pet_node,
+            segmentation_node=seg_node,
+            output_dir=self.mcnp_output_dir,
+            isotope=self.mcnp_isotope,
+            n_particles=self.mcnp_n_particles,
+            refine_hu=self.mcnp_refine_hu,
+            flip_rows=self.mcnp_flip_rows,
+        )
+
+        self.mcnp_path = input_path
+        file_size_kb = os.path.getsize(input_path) / 1024
+        logger.info(f"  Archivo MCNP generado: {input_path}")
+        logger.info(f"  Tamano: {file_size_kb:.1f} KB")
+
+        # Copiar archivo fuente .src al directorio de output
+        src_source = r"C:\MAT\3Dosim\modificacion_universos\Y90cel3D.src"
+        if os.path.exists(src_source):
+            import shutil
+            dst_source = os.path.join(self.mcnp_output_dir, "Y90cel3D.src")
+            shutil.copy2(src_source, dst_source)
+            logger.info(f"  Archivo fuente copiado: {dst_source}")
+        else:
+            logger.warning(f"  Archivo fuente no encontrado: {src_source}")
+            logger.warning("  El archivo .i referencia 'read file Y90cel3D.src' pero falta el archivo")
+
+        logger.info("  ========================================================")
+
+    def _validate_mcnp_params(self):
+        """Dialogo NO modal para que el medico revise y apruebe los parametros MCNP."""
+        import slicer
+        from qt import QMessageBox
+        logger.info("")
+        logger.info("  ========================================================")
+        logger.info("  Validacion de parametros MCNP...")
+        logger.info("  ========================================================")
+
+        mcnp_path = getattr(self, 'mcnp_path', None)
+        if not mcnp_path or not os.path.exists(mcnp_path):
+            logger.warning("  No hay archivo MCNP generado para validar")
+            return
+
+        file_size_kb = os.path.getsize(mcnp_path) / 1024
+
+        msg_box = QMessageBox(slicer.util.mainWindow())
+        msg_box.setWindowTitle("Validacion de Parametros MCNP")
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setText(
+            f"<b>Parametros de entrada MCNP generados</b><br><br>"
+            f"<b>Archivo:</b> {os.path.basename(mcnp_path)}<br>"
+            f"<b>Ubicacion:</b> {self.mcnp_output_dir}<br>"
+            f"<b>Tamano:</b> {file_size_kb:.1f} KB<br><br>"
+            f"<b>Isotopo:</b> {self.mcnp_isotope}<br>"
+            f"<b>Particulas:</b> {self.mcnp_n_particles:.0e}<br>"
+            f"<b>Refinar HU:</b> {'Si' if self.mcnp_refine_hu else 'No'}<br>"
+            f"<b>Flip rows:</b> {'Si' if self.mcnp_flip_rows else 'No'}<br><br>"
+            f"<b>CT:</b> {self.ct_node.GetName() if self.ct_node else 'N/A'}<br>"
+            f"<b>PET:</b> {self.pet_node.GetName() if self.pet_node else 'N/A (fuente uniforme)'}<br>"
+            f"<b>Segmentacion:</b> {self.segmentation_node.GetName() if self.segmentation_node else 'N/A'}<br><br>"
+            f"<i>Revise los parametros antes de ejecutar MCNP.</i>"
+        )
+        msg_box.setTextFormat(1)  # Qt.RichText
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        msg_box.setModal(False)
+        msg_box.show()
+        msg_box.raise_()
+        msg_box.activateWindow()
+        logger.info("  Dialogo de validacion MCNP mostrado (no modal)")
+        logger.info("  ========================================================")
 
     def _save_results_json(self):
         """Guarda un archivo results.json con el resumen completo del pipeline.
@@ -1855,6 +1973,9 @@ class PipelineTestOrchestrator:
             for s in self.screenshots:
                 logger.info(f"    {os.path.basename(s)}")
         logger.info(f"  Output:         {self.output_dir}")
+        if self.mcnp_path:
+            logger.info(f"  MCNP input:     {self.mcnp_path}")
+            logger.info(f"  MCNP isotopo:   {self.mcnp_isotope}")
 
         logger.info("")
         logger.info("=" * 70)

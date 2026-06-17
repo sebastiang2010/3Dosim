@@ -76,6 +76,31 @@ def main():
         dest="force_cpu",
         help="Permite GPU en TotalSegmentator si esta disponible",
     )
+    parser.add_argument(
+        "--isotope",
+        type=str,
+        default=None,
+        choices=["Y-90", "I-131", "Lu-177", "Tc-99m"],
+        help="Isotopo para fuente MCNP (default: desde config o Y-90)",
+    )
+    parser.add_argument(
+        "--n-particles",
+        type=float,
+        default=None,
+        help="Numero de historias MCNP (default: desde config o 1e7)",
+    )
+    parser.add_argument(
+        "--refine-hu",
+        action="store_true",
+        default=False,
+        help="Refinar mapeo HU -> materiales en MCNP",
+    )
+    parser.add_argument(
+        "--flip",
+        action="store_true",
+        default=False,
+        help="Invertir eje Y antes de RLE (compatibilidad MATLAB)",
+    )
     args, _ = parser.parse_known_args()
 
     from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
@@ -88,6 +113,10 @@ def main():
         segmenter=args.segmenter,
         stop_before_segment=args.stop_before_segment,
         force_cpu=args.force_cpu,
+        mcnp_isotope=args.isotope,
+        mcnp_n_particles=int(args.n_particles) if args.n_particles else None,
+        mcnp_refine_hu=args.refine_hu,
+        mcnp_flip_rows=args.flip,
     )
     orchestrator.run()
 

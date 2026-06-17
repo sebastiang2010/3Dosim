@@ -31,6 +31,18 @@
         "link_slices": true
     },
 
+    // Configuracion MCNP (Modulo 2 - Generacion de entrada)
+    "mcnp": {
+        // Isotopo para la fuente: Y-90, I-131, Lu-177, Tc-99m
+        "isotope": "Y-90",
+        // Numero de historias (particulas)
+        "n_particles": 10000000,
+        // Refinar mapeo HU -> materiales (mas lento pero mas preciso)
+        "refine_hu": false,
+        // Invertir eje Y antes de RLE (compatibilidad MATLAB)
+        "flip_rows": false
+    },
+
     // Comportamiento del pipeline
     "pipeline": {
         // Forzar validacion medica incluso al restaurar desde checkpoint

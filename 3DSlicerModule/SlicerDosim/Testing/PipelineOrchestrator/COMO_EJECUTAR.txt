@@ -1,0 +1,136 @@
+================================================================================
+                    3Dosim Pipeline - Instrucciones de Ejecucion
+================================================================================
+
+COMANDO DE EJECUCION
+--------------------
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" ^
+    --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" ^
+    --data-dir "<DIRECTORIO_PACIENTE>" ^
+    --segmenter totalsegmentator ^
+    --force-cpu ^
+    --reset
+
+Ejemplo con Paciente_2:
+& "C:\Users\Sebastian\AppData\Local\slicer.org\Slicer 5.8.1\Slicer.exe" --python-script "C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py" --data-dir "C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2" --segmenter totalsegmentator --force-cpu --reset
+
+
+OPCIONES DEL COMANDO
+---------------------
+--data-dir <ruta>       Ruta a los datos DICOM del paciente
+                        Ej: C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2
+
+--segmenter <tipo>      Motor de segmentacion:
+                        - totalsegmentator (default): 104 organos, ~60-90s
+                        - simple: threshold basico, ~5s
+
+--force-cpu             true (default) o false
+                        true: fuerza uso de CPU
+                        false: usa GPU si disponible
+
+--reset                 Reinicia checkpoints para empezar desde cero
+                        (omitir para continuar desde ultimo checkpoint)
+
+
+ARCHIVOS PRINCIPALES
+--------------------
+Entry point:       C:\programas\3Dosim\3Dosim_v_3.14\3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\main.py
+Wrapper legacy:    3DSlicerModule\SlicerDosim\Testing\Python\test_pipeline_orchestrator.py
+Config TS:         3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\totalsegmentator_config.jsonc
+Config TS Body:    3DSlicerModule\SlicerDosim\Testing\PipelineOrchestrator\totalsegmentator_config_body.jsonc
+Tissue config:     3DSlicerModule\SlicerDosim\Modules\Scripted\SlicerDosim\Resources\Config\tissue_config.json
+
+
+OUTPUT DEL PIPELINE
+-------------------
+Screenshots:       <data-dir>\..\resultados_test\screenshots\
+                   Ej: C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2\..\resultados_test\screenshots\
+
+Labelmaps:         <data-dir>\..\resultados_test\labelmaps\
+                   - 3Dosim_labelmap.nii  (NIfTI)
+                   - 3Dosim_labelmap.nrrd (NRRD)
+
+Escenas Slicer:    C:/MAT/3Dosim/ai-pipe/imagenes/3Dosim_scene.mrb
+                   (Se actualiza automaticamente tras cada paso)
+
+Logs:              <data-dir>\..\resultados_test\logs\pipeline.log
+                   Checkpoints: <data-dir>\..\resultados_test\.checkpoints\pipeline_checkpoint.json
+                   Historial:   <data-dir>\..\resultados_test\pipeline_results.json
+
+
+FLUJO DEL PIPELINE (14 pasos)
+------------------------------
+ 1. check_slicer          - Verifica entorno Slicer
+ 2. load_dicom            - Carga CT+PET desde DICOM
+ 3. remove_couch_air      - Elimina camilla y aire (threshold + morfologia)
+ 4. resample_pet          - Registra PET a CT con Elastix (rigid)
+ 5. show_fusion           - Muestra fusion CT+PET
+ 6. anonymize             - Anonimiza nodos (renumbra)
+ 7. segment_phantom       - TotalSegmentator task='total' (104 organos)
+ 8. validate_segmentation - Validacion medica (dialogo NO modal)
+ 9. add_synthetic_tumor   - Crea tumor esferico 1cm radio en higado
+10. validate_tumor        - Validacion medica del tumor
+11. create_healthy_liver  - Crea "higado_sano" = higado - tumor
+12. segment_body          - TotalSegmentator task='body' (contorno corporal)
+13. export_labelmap       - Exporta NIfTI+NRRD con indices tissue_config
+14. (fin)                 - Reporte final
+
+
+INDICES PHANTOM (tissue_config.json)
+------------------------------------
+  1 - Aire (background)
+  2-25 - Tejidos varios (asignacion automatica)
+  30 - Tejido_blando (default)
+  50 - Pulmon (lobos)
+  80 - Hueso (vertebras, costillas, escapula, esternon)
+  90 - Higado
+ 100 - Tumor (sintetico o segmentado)
+
+Segmentos no mapeados en tissue_config reciben indices secuenciales 2-256.
+
+
+VALIDACION MEDICA
+-----------------
+- Dialogo NO MODAL: Slicer permanece operativo
+- El medico puede:
+  * Navegar slices (axial/sagital/coronal)
+  * Ocultar/mostrar PET (slider opacidad)
+  * Rotar vista 3D
+  * Examinar segmentacion
+- Botones: APROBAR (continua) | RECHAZAR (detiene pipeline)
+
+
+CHECKPOINTS
+-----------
+El pipeline guarda progreso en JSON tras cada paso. Si se corta:
+- Reiniciar con mismo comando (sin --reset) → continua desde ultimo paso OK
+- Usar --reset para forzar inicio desde cero
+
+Archivo: <data-dir>\..\resultados_test\.checkpoints\pipeline_checkpoint.json
+
+
+ERRORES COMUNES
+---------------
+1. "TotalSegmentator no disponible"
+   → Instalar extension desde Extension Manager, reiniciar Slicer
+
+2. "Checkpoint corrupto"
+   → Ejecutar con --reset
+
+3. "Validacion rechazada"
+   → El medico debe aprobar para continuar. Si rechaza, pipeline se detiene.
+
+4. "Fallo al guardar escena"
+   → Verificar espacio en disco en C:/MAT/3Dosim/ai-pipe/imagenes/
+
+
+NOTAS
+-----
+- Tiempo total tipico: 3-5 minutos (TotalSegmentator ~60-90s)
+- El pipeline es NO bloqueante durante validaciones medicas
+- Las escenas .mrb son comprimidas (ZIP con MRML + NRRD)
+- Labelmap incluye body + organos + tumor sintetico (si aprobado)
+
+================================================================================
+                              Fin de instrucciones
+================================================================================

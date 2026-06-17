@@ -21,7 +21,11 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
 )
 
-_scripted_dir = os.path.join(os.path.dirname(__file__), "..")
+# Resuelve el Scripted/ real (funciona desde junctions en qt-scripted-modules
+# gracias a realpath que sigue el junction hasta el destino)
+_scripted_dir = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+)
 if _scripted_dir not in sys.path:
     sys.path.insert(0, _scripted_dir)
 

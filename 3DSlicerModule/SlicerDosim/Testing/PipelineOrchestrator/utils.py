@@ -123,7 +123,7 @@ def kill_existing_slicer():
         # Usar PowerShell: busca procesos 'Slicer' que no sean el actual
         ps_find = (
             f"$cur={current_pid}; "
-            "Get-Process -Name 'Slicer' -ErrorAction SilentlyContinue | "
+            "Get-Process -Name 'SlicerApp-real','PythonSlicer' -ErrorAction SilentlyContinue | "
             "Where-Object { $_.Id -ne $cur } | "
             "ForEach-Object { $_.Id.ToString() }"
         )

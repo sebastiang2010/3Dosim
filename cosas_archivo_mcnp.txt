@@ -1,0 +1,138 @@
+es un solo espacio 
+
+cell 
+
+sup 
+
+mode 
+%no mes espacio !!
+
+si5 l (1<102[0 61 136]<101) (1<102[0 61 137]<101) (1<102[0 61 138]<101)
+       (1<102[0 61 154]<101) (1<102[0 61 155]<101) (1<102[0 62 136]<101)
+       (1<102[0 62 137]<101) (1<102[0 62 138]<101) (1<102[0 62 139]<101)
+       (1<102[0 62 154]<101) (1<102[0 62 155]<101) (1<102[0 63 135]<101)
+       (1<102[0 63 136]<101) (1<102[0 63 137]<101) (1<102[0 63 138]<101)
+       (1<102[0 63 139]<101) (1<102[0 63 155]<101) (1<102[0 64 135]<101)
+       (1<102[0 64 136]<101) (1<102[0 64 137]<101) (1<102[0 64 138]<101)
+       (1<102[0 64 139]<101) (1<102[0 65 136]<101) (1<102[0 65 137]<101)
+       (1<102[0 65 138]<101) (1<102[0 65 139]<101) (1<102[0 66 136]<101)
+       (1<102[0 66 137]<101) (1<102[0 66 138]<101) (1<102[0 67 137]<101)
+       (1<102[0 134 75]<101) (1<102[0 146 69]<101) (1<102[0 147 68]<101)
+       (1<102[0 147 69]<101) (1<102[0 148 68]<101) (1<102[0 148 69]<101)
+       (1<102[0 185 159]<101) (1<102[0 185 160]<101)
+       (1<102[0 185 161]<101) (1<102[0 186 158]<101)
+       (1<102[0 186 159]<101) (1<102[0 186 160]<101)
+       (1<102[0 186 161]<101) (1<102[0 187 158]<101)
+       (1<102[0 187 159]<101) (1<102[0 187 160]<101)
+       (1<102[0 187 161]<101) (1<102[0 188 158]<101)
+       (1<102[0 188 159]<101) (1<102[0 188 160]<101)
+       (1<102[0 188 161]<101) (1<102[0 189 158]<101)
+	   
+deben ser dos por fila !!
+sp5 4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+      4.108006051915e-07 4.108006051915e-07 4.108006051915e-07
+una solo fila !!
+
+faltan materiales 
+c MATERIALES
+c Aire Dry (near sea level)
+c densidad [g/cm^3]:   0.001205 
+c suma de composición:   0.9997 
+m1          6000            -0.000124 
+          7000            -0.755268 
+          8000            -0.231481 
+          18000            -0.012827 
+c Soft Tissue (ICRU 44)
+c densidad [g/cm^3]:   1.06 
+c suma de composición:   1.003 
+m2          1000            -0.105 
+          6000            -0.143 
+          7000            -0.034 
+          8000            -0.708 
+          11000            -0.002 
+          15000            -0.003 
+          16000            -0.003 
+          17000            -0.002 
+          19000            -0.003 
+c Liver (ICRP 110)
+c densidad [g/cm^3]:   1.05 
+c suma de composición:   1 
+m3          1000            -0.102 
+          6000            -0.131 
+          7000            -0.031 
+          8000            -0.724 
+          11000            -0.002 
+          15000            -0.002 
+          16000            -0.003 
+          17000            -0.002 
+          19000            -0.003 
+c Tumor
+c densidad [g/cm^3]:   1.05 
+c suma de composición:   1 
+m4          1000            -0.102 
+          6000            -0.131 
+          7000            -0.031 
+          8000            -0.724 
+          11000            -0.002 
+          15000            -0.002 
+          16000            -0.003 
+          17000            -0.002 
+          19000            -0.003 
+c Lung  (ICRP 110)
+c densidad [g/cm^3]:   0.382 
+c suma de composición:   0.894 
+m5          1000            -0.103 
+          6000            -0.107 
+          7000            -0.022 
+          8000            -0.644 
+          11000            -0.01 
+          15000            -0.002 
+          16000            -0.003 
+          17000            -0.001 
+          19000            -0.002 
+		  
+c Universos
+1 1 -0.001205 -650 u=1 imp:p=1 imp:e=1 $ Aire
+2 like 1 but mat=2 rho=-1.06 u=2 imp:p=1 imp:e=1 $ spleen
+3 like 1 but mat=2 rho=-1.06 u=3 imp:p=1 imp:e=1 $ right kidney
+4 like 1 but mat=2 rho=-1.06 u=4 imp:p=1 imp:e=1 $ left kidney
+5 like 1 but mat=2 rho=-1.06 u=5 imp:p=1 imp:e=1 $ gallbladder
+6 like 1 but mat=2 rho=-1.06 u=6 imp:p=1 imp:e=1 $ stomach
+7 like 1 but mat=2 rho=-1.06 u=7 imp:p=1 imp:e=1 $ pancreas
+8 like 1 but mat=2 rho=-1.06 u=8 imp:p=1 imp:e=1 $ right adrenal gland
+9 like 1 but mat=2 rho=-1.06 u=9 imp:p=1 imp:e=1 $ left adrenal gland
+10 like 1 but mat=2 rho=-1.06 u=10 imp:p=1 imp:e=1 $ esophagus
+11 like 1 but mat=2 rho=-1.06 u=11 imp:p=1 imp:e=1 $ small bowel
+12 like 1 but mat=2 rho=-1.06 u=12 imp:p=1 imp:e=1 $ duodenum
+13 like 1 but mat=2 rho=-1.06 u=13 imp:p=1 imp:e=1 $ colon
+14 like 1 but mat=2 rho=-1.06 u=14 imp:p=1 imp:e=1 $ heart
+15 like 1 but mat=2 rho=-1.06 u=15 imp:p=1 imp:e=1 $ aorta
+16 like 1 but mat=2 rho=-1.06 u=16 imp:p=1 imp:e=1 $ pulmonary venous system
+17 like 1 but mat=2 rho=-1.06 u=17 imp:p=1 imp:e=1 $ left atrial appendage
+18 like 1 but mat=2 rho=-1.06 u=18 imp:p=1 imp:e=1 $ superior vena cava
+19 like 1 but mat=2 rho=-1.06 u=19 imp:p=1 imp:e=1 $ inferior vena cava
+20 like 1 but mat=2 rho=-1.06 u=20 imp:p=1 imp:e=1 $ portal vein and splenic vein
+21 like 1 but mat=2 rho=-1.06 u=21 imp:p=1 imp:e=1 $ spinal cord
+22 like 1 but mat=2 rho=-1.06 u=22 imp:p=1 imp:e=1 $ left deep back muscle
+23 like 1 but mat=2 rho=-1.06 u=23 imp:p=1 imp:e=1 $ right deep back muscle
+24 like 1 but mat=2 rho=-1.06 u=24 imp:p=1 imp:e=1 $ left iliopsoas muscle
+25 like 1 but mat=2 rho=-1.06 u=25 imp:p=1 imp:e=1 $ right iliopsoas muscle
+50 like 1 but mat=2 rho=-1.06 u=50 imp:p=1 imp:e=1 $ superior lobe of left lung
+80 like 1 but mat=2 rho=-1.06 u=80 imp:p=1 imp:e=1 $ l3 vertebra
+90 like 1 but mat=2 rho=-1.06 u=90 imp:p=1 imp:e=1 $ liver
+100 like 1 but mat=2 rho=-1.06 u=100 imp:p=1 imp:e=1 $ tumor
+
+recuerda respetar los indeces que estan en tissue_config.json !! 
