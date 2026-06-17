@@ -46,14 +46,37 @@ def find_last_scene():
 def main():
     _add_parent_to_path()
     
+    # Cargar defaults desde config unificada (si disponible)
+    try:
+        from SlicerDosim.SlicerDosimLib.config import load_unified_config
+        cfg = load_unified_config()
+        default_isotope = cfg.get("mcnp_source", {}).get("isotope", "Y-90")
+        default_npart = cfg.get("mcnp_run", {}).get("n_particles", int(1e7))
+        default_mcnp_out = cfg.get("paths", {}).get("mcnp_output_dir", None)
+        default_n_liver = cfg.get("mcnp_tallies", {}).get("n_liver_tallies", 5)
+        default_n_tumor = cfg.get("mcnp_tallies", {}).get("n_tumor_tallies", 10)
+        default_flip_y = cfg.get("geometry", {}).get("flip_y", False)
+        default_flip_z = cfg.get("geometry", {}).get("flip_z", False)
+    except Exception:
+        default_isotope = "Y-90"
+        default_npart = int(1e7)
+        default_mcnp_out = None
+        default_n_liver = 5
+        default_n_tumor = 10
+        default_flip_y = False
+        default_flip_z = False
+
     parser = argparse.ArgumentParser(description="Genera input MCNP desde escena guardada")
     parser.add_argument("--scene", type=str, default=None, help="Ruta a escena .mrb especifica")
-    parser.add_argument("--isotope", type=str, default="Y-90", help="Isotopo (default: Y-90)")
-    parser.add_argument("--n-particles", type=float, default=1e7, help="Numero de particulas")
-    parser.add_argument("--output-dir", type=str, default=None, help="Directorio de salida para MCNP")
+    parser.add_argument("--isotope", type=str, default=default_isotope, help="Isotopo")
+    parser.add_argument("--n-particles", type=float, default=default_npart, help="Numero de particulas")
+    parser.add_argument("--output-dir", type=str, default=default_mcnp_out, help="Directorio de salida para MCNP")
     parser.add_argument("--refine-hu", action="store_true", help="Refinar mapeo HU->materiales")
-    parser.add_argument("--flip", action="store_true", default=False, help="Invertir eje Y antes de RLE (como MATLAB)")
-    parser.add_argument("--no-flip", action="store_true", default=False, help="No invertir eje Y (default)")
+    parser.add_argument("--flip", action="store_true", default=default_flip_y, help="Invertir eje Y antes de RLE (como MATLAB)")
+    parser.add_argument("--no-flip", action="store_true", default=False, help="No invertir eje Y (sobrescribe config)")
+    parser.add_argument("--flip-z", action="store_true", default=default_flip_z, help="Invertir eje Z antes de RLE")
+    parser.add_argument("--n-liver", type=int, default=default_n_liver, help="Numero de tallies *f8 aleatorios en higado")
+    parser.add_argument("--n-tumor", type=int, default=default_n_tumor, help="Numero de tallies *f8 aleatorios en tumor")
     args, _ = parser.parse_known_args()
     
     # Buscar escena
@@ -161,7 +184,15 @@ def main():
     msg_start.setWindowTitle("Generando Input MCNP")
     msg_start.setText("Generando entrada para MCNP...")
     flip_text = "SI" if flip_rows else "NO"
-    msg_start.setInformativeText(f"Isotopo: {args.isotope}\nParticulas: {args.n_particles:.0e}\nFlip Y: {flip_text}\n\nPor favor espere...")
+    flipz_text = "SI" if args.flip_z else "NO"
+    msg_start.setInformativeText(
+        f"Isotopo: {args.isotope}\n"
+        f"Particulas: {args.n_particles:.0e}\n"
+        f"Flip Y: {flip_text}\n"
+        f"Flip Z: {flipz_text}\n"
+        f"Tallies: liver={args.n_liver}, tumor={args.n_tumor}\n\n"
+        f"Por favor espere..."
+    )
     msg_start.setIcon(qt.QMessageBox.Information)
     msg_start.setStandardButtons(qt.QMessageBox.NoButton)
     msg_start.show()
@@ -173,6 +204,8 @@ def main():
     print(f"  Isotopo: {args.isotope}")
     print(f"  Particulas: {args.n_particles:.0e}")
     print(f"  Flip Y: {'SI' if flip_rows else 'NO'}")
+    print(f"  Flip Z: {'SI' if args.flip_z else 'NO'}")
+    print(f"  Tallies liver: {args.n_liver}, tumor: {args.n_tumor}")
     
     from SlicerDosim.SlicerDosimLib import MCNPInputGenerator
     
@@ -188,19 +221,25 @@ def main():
             n_particles=int(args.n_particles),
             refine_hu=args.refine_hu,
             flip_rows=flip_rows,
+            flip_z=args.flip_z,
+            n_liver_tallies=args.n_liver,
+            n_tumor_tallies=args.n_tumor,
         )
         
         # Cerrar dialogo de inicio
         msg_start.close()
         
         if input_path:
-            # Copiar archivo fuente .src
+            # Copiar archivo fuente .src (si no esta ya en el mismo dir)
             import shutil
-            src_source = r"C:\MAT\3Dosim\modificacion_universos\Y90cel3D.src"
+            src_source = r"C:\MAT\3Dosim\ai-pipe\mcnp_input\Y90cel3D.src"
+            dst_source = os.path.join(output_dir, "Y90cel3D.src")
             if os.path.exists(src_source):
-                dst_source = os.path.join(output_dir, "Y90cel3D.src")
-                shutil.copy2(src_source, dst_source)
-                print(f"  Archivo fuente copiado: {dst_source}")
+                if os.path.abspath(src_source) != os.path.abspath(dst_source):
+                    shutil.copy2(src_source, dst_source)
+                    print(f"  Archivo fuente copiado: {dst_source}")
+                else:
+                    print(f"  Archivo fuente ya en destino: {dst_source}")
             
             slicer.util.showStatusMessage(f"MCNP generado: {os.path.basename(input_path)}", 5000)
             
@@ -213,7 +252,10 @@ def main():
                 f"<b>Ubicacion:</b> {output_dir}<br>"
                 f"<b>Tamano:</b> {os.path.getsize(input_path) / 1024:.1f} KB<br><br>"
                 f"<b>Isotopo:</b> {args.isotope}<br>"
-                f"<b>Particulas:</b> {args.n_particles:.0e}"
+                f"<b>Particulas:</b> {args.n_particles:.0e}<br>"
+                f"<b>Flip Z:</b> {'Si' if args.flip_z else 'No'}<br>"
+                f"<b>Tallies liver:</b> {args.n_liver}<br>"
+                f"<b>Tallies tumor:</b> {args.n_tumor}"
             )
             msg_done.setDetailedText(
                 f"Para ejecutar MCNP:\n"

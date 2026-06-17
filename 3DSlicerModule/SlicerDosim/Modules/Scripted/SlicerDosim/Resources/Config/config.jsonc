@@ -1,0 +1,141 @@
+// 3Dosim v3.14 — Configuración Unificada
+// ===========================================
+// Archivo único de configuración del pipeline y generación MCNP.
+// Toda ruta, flag o parámetro debe vivir aquí y no hardcodearse.
+//
+// Schema version: 2
+// Ubicación: junto a tissue_config.json para acceso desde SlicerDosimLib
+
+{
+    // ------------------------------------------------------------------
+    // RUTAS Y DIRECTORIOS
+    // ------------------------------------------------------------------
+    "paths": {
+        // Escenas .mrb guardadas tras cada paso del pipeline
+        "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
+        // Output de entrada MCNP (.i)
+        "mcnp_output_dir": "C:/MAT/3Dosim/ai-pipe/mcnp_input",
+        // Labelmaps NIfTI/NRRD exportados
+        "labelmap_output_dir": "C:/MAT/3Dosim/ai-pipe/labelmaps",
+        // Resultados de test (checkpoints, screenshots, pipeline_results.json)
+        "results_dir_rel": "../resultados_test",
+        // Ruta al tissue_config.json (relativa o absoluta)
+        "tissue_config_path": "Resources/Config/tissue_config.json",
+        // Archivo fuente externo con espectro/actividad
+        "source_file_path": "C:/MAT/3Dosim/ai-pipe/mcnp_input/Y90cel3D.src"
+    },
+
+    // ------------------------------------------------------------------
+    // SEGMENTACIÓN
+    // ------------------------------------------------------------------
+    "segmentation": {
+        // Método: "simple" (threshold rápido) | "totalsegmentator"
+        "method": "simple",
+        // Parámetros específicos de TotalSegmentator
+        "totalsegmentator": {
+            // Tarea: "total" (104 órganos), "total_mr", "body", "vertebrae", etc.
+            "task": "total",
+            // Modo rápido (true=~3mm res, ~2min; false=full res, ~5-50min)
+            "fast": true,
+            // Forzar CPU (true=CPU; false=GPU si disponible)
+            "force_cpu": true,
+            // Subconjunto de estructuras (null=todas)
+            "subset": null,
+            // Mostrar diálogos interactivos
+            "interactive": false
+        }
+    },
+
+    // ------------------------------------------------------------------
+    // GEOMETRÍA — Flips de coordenadas
+    // ------------------------------------------------------------------
+    "geometry": {
+        // Invertir eje Y (compatibilidad MATLAB — flip en filas)
+        // MATLAB: flip=1 → I = I(end:-1:1, :, :)
+        "flip_y": true,
+        // Invertir eje Z (como MATLAB: I = I(:, :, end:-1:1))
+        // MATLAB: flipz=0 (desactivado)
+        "flip_z": false
+    },
+
+    // ------------------------------------------------------------------
+    // GENERACIÓN MCNP — Fuente
+    // ------------------------------------------------------------------
+    "mcnp_source": {
+        // Isótopo: "Y-90", "I-131", "Lu-177", "Tc-99m"
+        "isotope": "Y-90",
+        // Archivo de fuente externo (read file)
+        "source_file": "Y90cel3D.src"
+    },
+
+    // ------------------------------------------------------------------
+    // GENERACIÓN MCNP — Tallies
+    // ------------------------------------------------------------------
+    "mcnp_tallies": {
+        // Mesh tally FMESH4 (true=escribir, false=solo *f8 puntuales)
+        "mesh_tally": true,
+        // Tipo de mesh: "pedep" (energy deposition) | "total" (flux)
+        "mesh_type": "pedep",
+        // Número de *f8 point detectors aleatorios en hígado
+        "n_liver_tallies": 5,
+        // Número de *f8 point detectors aleatorios en tumor
+        "n_tumor_tallies": 10
+    },
+
+    // ------------------------------------------------------------------
+    // GENERACIÓN MCNP — Materiales
+    // ------------------------------------------------------------------
+    "mcnp_materials": {
+        // Esquema de IDs: "sequential" (m1=aire, m2=tejido, ... m6=hueso)
+        //                "index"     (m1=aire, m30=tejido, m50=pulmón, ...)
+        "mapping_scheme": "sequential",
+        // Archivo de configuración de tejidos con composiciones
+        "config_file": "tissue_config.json"
+    },
+
+    // ------------------------------------------------------------------
+    // GENERACIÓN MCNP — Ejecución
+    // ------------------------------------------------------------------
+    "mcnp_run": {
+        // Número de historias (partículas)
+        "n_particles": 10000000,
+        // Refinar mapeo HU -> materiales (más lento, más preciso)
+        "refine_hu": false
+    },
+
+    // ------------------------------------------------------------------
+    // VISUALIZACIÓN MÉDICA (Slicer views)
+    // ------------------------------------------------------------------
+    "views": {
+        // Layout de Slicer: "ConventionalView" (axial/sagital/coronal+3D)
+        "layout": "ConventionalView",
+        // Opacidad del overlay PET en fusión 2D (0.0–1.0)
+        "pet_opacity": 0.35,
+        // Colormap para PET
+        "pet_colormap": "vtkMRMLColorTableNodeRainbow",
+        // Window/Level de CT (HU)
+        "ct_window": 400.0,
+        "ct_level": 40.0,
+        // Window/Level de PET (SUV)
+        "pet_window": 40.0,
+        "pet_level": 20.0,
+        // Slices sincronizados (navegación axial/sagital/coronal linkeada)
+        "link_slices": true
+    },
+
+    // ------------------------------------------------------------------
+    // COMPORTAMIENTO DEL PIPELINE
+    // ------------------------------------------------------------------
+    "pipeline": {
+        // Forzar validación médica aunque se restaure desde checkpoint
+        "force_validation_on_restore": true,
+        // Guardar escena .mrb tras cada paso
+        "auto_save_scene": true,
+        // Tomar screenshot tras cada paso
+        "auto_screenshot": true,
+        // Preguntar por git commit al finalizar
+        "git_prompt": true,
+        // Versión del schema de configuración
+        "config_version": 2
+    }
+}

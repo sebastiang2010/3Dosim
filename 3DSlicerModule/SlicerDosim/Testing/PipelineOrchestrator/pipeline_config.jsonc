@@ -40,7 +40,8 @@
         // Refinar mapeo HU -> materiales (mas lento pero mas preciso)
         "refine_hu": false,
         // Invertir eje Y antes de RLE (compatibilidad MATLAB)
-        "flip_rows": false
+        // MATLAB: flip=1 → I = I(end:-1:1, :, :)
+        "flip_rows": true
     },
 
     // Comportamiento del pipeline

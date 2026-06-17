@@ -52,7 +52,9 @@ class PipelineTestOrchestrator:
                  no_consola: bool = False, segmenter: str = "simple",
                  stop_before_segment: bool = False, force_cpu: bool = True,
                  mcnp_isotope: str = None, mcnp_n_particles: int = None,
-                 mcnp_refine_hu: bool = False, mcnp_flip_rows: bool = False):
+                 mcnp_refine_hu: bool = False, mcnp_flip_rows: bool = False,
+                 mcnp_flip_z: bool = False,
+                 mcnp_n_liver_tallies: int = None, mcnp_n_tumor_tallies: int = None):
         self.data_dir = data_dir
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
@@ -112,12 +114,20 @@ class PipelineTestOrchestrator:
         self.mcnp_n_particles = mcnp_n_particles or mcnp_config.get("n_particles", int(1e7))
         self.mcnp_refine_hu = mcnp_refine_hu or mcnp_config.get("refine_hu", False)
         self.mcnp_flip_rows = mcnp_flip_rows or mcnp_config.get("flip_rows", False)
+        self.mcnp_flip_z = mcnp_flip_z or mcnp_config.get("flip_z", False)
+        # Tallies desde config unificada (tissue_config o defaults)
+        tallies_cfg = mcnp_config.get("tallies", {})
+        self.mcnp_n_liver_tallies = mcnp_n_liver_tallies or tallies_cfg.get("n_liver_tallies", 5)
+        self.mcnp_n_tumor_tallies = mcnp_n_tumor_tallies or tallies_cfg.get("n_tumor_tallies", 10)
         self.mcnp_output_dir = os.path.join(self.output_dir, "mcnp_input")
-        logger.info(f"  MCNP isotope:     {self.mcnp_isotope}")
-        logger.info(f"  MCNP particles:   {self.mcnp_n_particles:.0e}")
-        logger.info(f"  MCNP refine HU:   {self.mcnp_refine_hu}")
-        logger.info(f"  MCNP flip rows:   {self.mcnp_flip_rows}")
-        logger.info(f"  MCNP output dir:  {self.mcnp_output_dir}")
+        logger.info(f"  MCNP isotope:       {self.mcnp_isotope}")
+        logger.info(f"  MCNP particles:     {self.mcnp_n_particles:.0e}")
+        logger.info(f"  MCNP refine HU:     {self.mcnp_refine_hu}")
+        logger.info(f"  MCNP flip rows:     {self.mcnp_flip_rows}")
+        logger.info(f"  MCNP flip Z:        {self.mcnp_flip_z}")
+        logger.info(f"  MCNP liver tallies: {self.mcnp_n_liver_tallies}")
+        logger.info(f"  MCNP tumor tallies: {self.mcnp_n_tumor_tallies}")
+        logger.info(f"  MCNP output dir:    {self.mcnp_output_dir}")
 
         self.consola = None
         if not no_consola:
@@ -1816,6 +1826,9 @@ class PipelineTestOrchestrator:
             n_particles=self.mcnp_n_particles,
             refine_hu=self.mcnp_refine_hu,
             flip_rows=self.mcnp_flip_rows,
+            flip_z=self.mcnp_flip_z,
+            n_liver_tallies=self.mcnp_n_liver_tallies,
+            n_tumor_tallies=self.mcnp_n_tumor_tallies,
         )
 
         self.mcnp_path = input_path
@@ -1824,7 +1837,7 @@ class PipelineTestOrchestrator:
         logger.info(f"  Tamano: {file_size_kb:.1f} KB")
 
         # Copiar archivo fuente .src al directorio de output
-        src_source = r"C:\MAT\3Dosim\modificacion_universos\Y90cel3D.src"
+        src_source = r"C:\MAT\3Dosim\ai-pipe\mcnp_input\Y90cel3D.src"
         if os.path.exists(src_source):
             import shutil
             dst_source = os.path.join(self.mcnp_output_dir, "Y90cel3D.src")

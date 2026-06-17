@@ -203,3 +203,145 @@ class TissueConfig:
     def to_dict(self) -> dict:
         """Retorna el JSON completo como dict."""
         return dict(self._raw)
+
+
+# ======================================================================
+# CARGA DE CONFIGURACION UNIFICADA (config.jsonc)
+# ======================================================================
+
+_CONFIG_CACHE: Optional[dict] = None
+
+
+def _find_unified_config_path() -> str:
+    """
+    Busca config.jsonc relativo a la ubicacion de este modulo.
+    Misma logica que _find_config_path().
+    """
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(this_dir, "config.jsonc"),
+        os.path.join(this_dir, "..", "Resources", "Config", "config.jsonc"),
+        os.path.join(this_dir, "..", "..", "Resources", "Config", "config.jsonc"),
+        os.environ.get("3DOSIM_CONFIG", ""),
+    ]
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    # Fallback: usar defaults
+    return ""
+
+
+def load_unified_config(force_reload: bool = False) -> dict:
+    """
+    Carga la configuracion unificada desde config.jsonc.
+
+    Retorna dict con merge profundo de defaults + valores del archivo.
+    Las funciones del pipeline pueden leer cualquier parametro via
+    notacion de puntos: cfg["mcnp"]["isotope"], cfg["geometry"]["flip_z"], etc.
+
+    Args:
+        force_reload: Si True, recarga del archivo ignorando cache.
+
+    Returns:
+        dict con toda la configuracion del pipeline.
+    """
+    global _CONFIG_CACHE
+    if _CONFIG_CACHE is not None and not force_reload:
+        return _CONFIG_CACHE
+
+    import re
+
+    # Valores por defecto completos
+    defaults = {
+        "paths": {
+            "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
+            "mcnp_output_dir": "C:/MAT/3Dosim/ai-pipe/mcnp_input",
+            "labelmap_output_dir": "C:/MAT/3Dosim/ai-pipe/labelmaps",
+            "results_dir_rel": "../resultados_test",
+            "tissue_config_path": "",
+            "source_file_path": "C:/MAT/3Dosim/ai-pipe/mcnp_input/Y90cel3D.src",
+        },
+        "segmentation": {
+            "method": "simple",
+            "totalsegmentator": {
+                "task": "total",
+                "fast": True,
+                "force_cpu": True,
+                "subset": None,
+                "interactive": False,
+            },
+        },
+        "geometry": {
+            "flip_y": False,
+            "flip_z": True,
+        },
+        "mcnp_source": {
+            "isotope": "Y-90",
+            "source_file": "Y90cel3D.src",
+        },
+        "mcnp_tallies": {
+            "mesh_tally": True,
+            "mesh_type": "pedep",
+            "n_liver_tallies": 5,
+            "n_tumor_tallies": 10,
+        },
+        "mcnp_materials": {
+            "mapping_scheme": "sequential",
+            "config_file": "tissue_config.json",
+        },
+        "mcnp_run": {
+            "n_particles": 10000000,
+            "refine_hu": False,
+        },
+        "views": {
+            "layout": "ConventionalView",
+            "pet_opacity": 0.35,
+            "pet_colormap": "vtkMRMLColorTableNodeRainbow",
+            "ct_window": 400.0,
+            "ct_level": 40.0,
+            "pet_window": 40.0,
+            "pet_level": 20.0,
+            "link_slices": True,
+        },
+        "pipeline": {
+            "force_validation_on_restore": True,
+            "auto_save_scene": True,
+            "auto_screenshot": True,
+            "git_prompt": True,
+            "config_version": 2,
+        },
+    }
+
+    config_path = _find_unified_config_path()
+    if not config_path:
+        logger.info("config.jsonc no encontrado — usando valores por defecto")
+        _CONFIG_CACHE = defaults
+        return defaults
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Remover comentarios // y /* */
+        content = re.sub(r"//.*", "", content)
+        content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
+        file_config = json.loads(content)
+
+        # Merge profundo
+        def deep_merge(base, override):
+            result = base.copy()
+            for k, v in override.items():
+                if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                    result[k] = deep_merge(result[k], v)
+                else:
+                    result[k] = v
+            return result
+
+        merged = deep_merge(defaults, file_config)
+        _CONFIG_CACHE = merged
+        logger.info(f"Config unificada cargada desde: {config_path}")
+        return merged
+
+    except Exception as e:
+        logger.warning(f"Error cargando config.jsonc: {e} — usando defaults")
+        _CONFIG_CACHE = defaults
+        return defaults

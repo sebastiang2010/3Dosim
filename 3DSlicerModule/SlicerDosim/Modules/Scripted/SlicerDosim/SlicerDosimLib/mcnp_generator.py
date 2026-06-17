@@ -25,16 +25,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # MAPPING: TotalSegmentator segment names -> phantom indices
 # ---------------------------------------------------------------------------
-# 1 = Aire (reservado)
-# 2-25 = Organos individuales de TS (mat=2 tejido blando)
-# 30 = Soft Tissue general (mat=2)
-# 50 = Lung - todos los lobulos (mat=2)
-# 80 = Bone - vertebras, costillas, escapula, esternon (mat=2)
-# 90 = Liver (mat=2)
-# 100 = Tumor (mat=2)
+# 1 = Aire
+# 2-25 = Organos individuales de TS -> Tejido_blando (mat=30)
+# 30 = Soft Tissue general (mat=30)
+# 50 = Pulmon (mat=50)
+# 80 = Hueso (mat=80)
+# 90 = Higado (mat=90)
+# 100 = Tumor (mat=100)
 #
-# Los indices 90 (liver) y 100 (tumor) se mantienen del tissue_config original.
-# Todos los organos usan material 2 (tejido blando ICRU 44) por ahora.
+# Materiales definidos en tissue_config.json con composiciones especificas.
+# Cada indice phantom mapea a un material MCNP distinto con densidad propia.
 # ---------------------------------------------------------------------------
 
 TS_SEGMENT_MAP = {
@@ -110,61 +110,9 @@ TS_SEGMENT_MAP = {
     "tumor_sintetico": 100,
 }
 
-# Phantom index -> MCNP material info (solo 2 materiales)
-PHANTOM_MAT_MAP = {
-    1:   {"mid": 1, "name": "Aire Dry (near sea level)", "rho": 0.001205},
-    # Todos los organos -> mat 2 (tejido blando)
-    2:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    3:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    4:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    5:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    6:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    7:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    8:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    9:   {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    10:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    11:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    12:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    13:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    14:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    15:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    16:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    17:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    18:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    19:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    20:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    21:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    22:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    23:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    24:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    25:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    30:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    50:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    80:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    90:  {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-    100: {"mid": 2, "name": "Soft Tissue (ICRU 44)", "rho": 1.06},
-}
-
-# Composiciones MCNP: (ZAID, weight_fraction negativa = mass fraction)
-MAT_COMPOSITIONS = {
-    1: [  # Aire Dry (near sea level)
-        (6000,  -0.000124),
-        (7000,  -0.755268),
-        (8000,  -0.231481),
-        (18000, -0.012827),
-    ],
-    2: [  # Soft Tissue (ICRU 44)
-        (1000,  -0.105),
-        (6000,  -0.143),
-        (7000,  -0.034),
-        (8000,  -0.708),
-        (11000, -0.002),
-        (15000, -0.003),
-        (16000, -0.003),
-        (17000, -0.002),
-        (19000, -0.003),
-    ],
-}
+# Nota: PHANTOM_MAT_MAP y MAT_COMPOSITIONS ahora se construyen
+# dinamicamente desde TissueConfig en MCNPInputGenerator._build_material_maps()
+# Ver tissue_config.json para la configuracion de cada tejido.
 
 
 class MCNPInputGenerator:
@@ -176,15 +124,77 @@ class MCNPInputGenerator:
       - Lattice voxelizado con RLE
       - Fuente desde archivo .src externo
       - Talles TMESH
-      - Materiales: m1 (aire) + m2 (tejido blando)
+      - Materiales desde tissue_config.json (aire, tejido blando, pulmon,
+        hueso, higado, tumor — cada uno con su composicion elemental)
     """
 
     def __init__(self):
         self.config = TissueConfig()
+        self._build_material_maps()
 
     # ======================================================================
-    # PUBLIC API
+    # BUILD MATERIAL MAPS FROM TISSUE CONFIG
     # ======================================================================
+
+    def _build_material_maps(self):
+        """
+        Construye mapas de materiales desde TissueConfig.
+
+        Crea:
+          self._phantom_to_mat[phantom_index] -> {"mid": int, "name": str, "rho": float}
+          self._compositions[mat_id] -> [(ZAID, mass_frac), ...]
+
+        Incluye fallback: si un indice phantom no tiene material definido,
+        se asigna a Tejido_blando (30). El indice 0 (vacio) se mapea a material 1 (aire).
+        """
+        self._phantom_to_mat: dict[int, dict] = {}
+        self._compositions: dict[int, list[tuple]] = {}
+
+        for t in self.config.get_all_tissues():
+            idx = t["index"]
+            mat = t.get("mcnp_material", {})
+            if not mat:
+                logger.warning(f"Tejido '{t['name']}' (idx={idx}) sin material MCNP definido")
+                continue
+
+            mid = mat["id"]
+            comp = mat.get("composition", {})
+            density = t["density_gcm3"]
+            name = t["name"]
+
+            self._phantom_to_mat[idx] = {
+                "mid": int(mid),
+                "name": name,
+                "rho": density,
+            }
+
+            # Convertir composicion de dict a lista (ZAID, mass_frac)
+            # MCNP usa fraccion de masa negativa
+            comp_list = [(str(zaid), float(frac)) for zaid, frac in comp.items()]
+            self._compositions[int(mid)] = comp_list
+
+        # Fallback: indice 0 (vacio) -> material 1 (aire)
+        if 0 not in self._phantom_to_mat:
+            aire_info = self._phantom_to_mat.get(1)
+            if aire_info:
+                self._phantom_to_mat[0] = aire_info
+
+        # Fallback: si falta Tejido_blando (30), crearlo con composicion generica
+        if 30 not in self._phantom_to_mat:
+            self._phantom_to_mat[30] = {"mid": 30, "name": "Tejido_blando", "rho": 1.04}
+            if 30 not in self._compositions:
+                self._compositions[30] = [
+                    ("1000", 0.101), ("6000", 0.111), ("7014", 0.020),
+                    ("8016", 0.762), ("11000", 0.002), ("15000", 0.003),
+                    ("16000", 0.003), ("17000", 0.002), ("19000", 0.003),
+                ]
+
+        logger.info(
+            f"Material maps construidos: {len(self._phantom_to_mat)} indices phantom "
+            f"-> {len(self._compositions)} materiales MCNP"
+        )
+        for idx, info in sorted(self._phantom_to_mat.items()):
+            logger.debug(f"  idx={idx:>3} -> mid={info['mid']} ({info['name']}, rho={info['rho']})")
 
     def generate(
         self,
@@ -196,6 +206,9 @@ class MCNPInputGenerator:
         n_particles: int = int(1e7),
         refine_hu: bool = False,
         flip_rows: bool = False,
+        flip_z: bool = False,
+        n_liver_tallies: int = 5,
+        n_tumor_tallies: int = 10,
     ) -> str:
         """
         Genera archivo de entrada MCNP completo.
@@ -209,6 +222,7 @@ class MCNPInputGenerator:
             n_particles: numero de historias
             refine_hu: si True, refina materiales por HU (no usado por ahora)
             flip_rows: si True, invierte eje Y antes de RLE (como MATLAB)
+            flip_z: si True, invierte eje Z antes de RLE (como MATLAB)
 
         Returns:
             ruta al archivo .i generado
@@ -239,18 +253,40 @@ class MCNPInputGenerator:
         # 3. Extraer PET array
         pet_arr = self._get_pet_array(pet_volume_node, dims)
 
+        # 3b. Aplicar flips ANTES de cualquier procesamiento (como MATLAB)
+        # MATLAB f_flip: I(end:-1:1, :, :) -> invierte la primera dimensión (rows/Y)
+        # En numpy con shape (NX, NY, NZ), Y está en dim 1 -> [:, ::-1, :]
+        if flip_rows:
+            phantom_arr = phantom_arr[:, ::-1, :].copy()
+            if pet_arr is not None:
+                pet_arr = pet_arr[:, ::-1, :].copy()
+            logger.info("  Flip Y aplicado (inversion eje Y, dim=1)")
+        if flip_z:
+            phantom_arr = phantom_arr[:, :, ::-1].copy()
+            if pet_arr is not None:
+                pet_arr = pet_arr[:, :, ::-1].copy()
+            logger.info("  Flip Z aplicado (inversion eje Z, dim=2)")
+
+        # 3c. Extraer PatientID (para tallies)
+        try:
+            patient_id = ct_volume_node.GetName()
+        except Exception:
+            patient_id = "3Dosim_CT"
+
         # 4. Escribir archivo MCNP
         os.makedirs(output_dir, exist_ok=True)
         input_path = os.path.join(output_dir, "3Dosim_mcnp.i")
 
         with open(input_path, "w") as f:
-            self._write_header(f, isotope, iso_data)
+            self._write_header(f, isotope, iso_data, flip_rows, flip_z)
             self._write_universes(f, phantom_arr, dims, spacing)
-            self._write_lattice(f, phantom_arr, dims, spacing, flip_rows)
+            self._write_lattice(f, phantom_arr, dims, spacing)
             self._write_surfaces(f, dims, spacing)
             self._write_mode(f, iso_data)
             self._write_source(f, pet_arr, dims, spacing, phantom_arr, iso_data)
             self._write_tallies(f, dims, spacing, iso_data)
+            self._write_random_tallies(f, phantom_arr, dims, spacing, patient_id,
+                                       n_liver_tallies, n_tumor_tallies, flip_rows, flip_z)
             self._write_materials(f)
             self._write_footer(f, n_particles)
 
@@ -431,7 +467,7 @@ class MCNPInputGenerator:
     # ESCRITURA DEL ARCHIVO MCNP (formato MATLAB)
     # ======================================================================
 
-    def _write_header(self, f, isotope, iso_data):
+    def _write_header(self, f, isotope, iso_data, flip_rows=False, flip_z=False):
         """Escribe cabecera del archivo."""
         import datetime
         now = datetime.datetime.now()
@@ -440,6 +476,9 @@ class MCNPInputGenerator:
         f.write("c ------------------------------------------------------ \n")
         f.write("c Archivo generado con 3Dosim, version 3.14 \n")
         f.write(f"c Fecha : {now.strftime('%d-%b-%Y %H:%M')} hs \n")
+        f.write(f"c Isotopo : {isotope} \n")
+        f.write(f"c Flip_y : {int(flip_rows)} \n")
+        f.write(f"c Flip_z : {int(flip_z)} \n")
         f.write("c ------------------------------------------------------  \n")
         f.write("c ------------------------------------------------------  \n")
         f.write("c ------------------------------------------------------  \n")
@@ -449,8 +488,8 @@ class MCNPInputGenerator:
     def _write_universes(self, f, phantom_arr, dims, spacing):
         """
         Escribe universos MCNP.
+        Cada indice phantom tiene su propio universo con material especifico.
         Universo 1 = aire (referencia para LIKE n BUT).
-        Todos los demas = like 1 but mat=2 rho=-1.06.
         SIN closure cells.
         """
         unique_vals = sorted(set(phantom_arr.flatten()))
@@ -459,15 +498,19 @@ class MCNPInputGenerator:
         logger.info(f"  Universos a generar: {unique_vals}")
 
         # Universo 1 = aire (referencia)
-        f.write("1 1 -0.001205 -650 u=1 imp:p=1 imp:e=1 $ Aire\n")
+        aire_info = self._phantom_to_mat.get(1, {"mid": 1, "rho": 0.001205})
+        f.write(f"1 {aire_info['mid']} -{aire_info['rho']} -650 u=1 imp:p=1 imp:e=1 $ Aire\n")
 
-        # Demas universos: like 1 but mat=2 rho=-1.06
+        # Demas universos: like 1 but mat=<mid> rho=-<density>
         for v in unique_vals:
             if v == 1:
                 continue  # ya escrito
-            # Buscar nombre del segmento
+            # Obtener material desde el mapa, con fallback a Tejido_blando (30)
+            mat_info = self._phantom_to_mat.get(v, self._phantom_to_mat.get(30, {"mid": 30, "rho": 1.04}))
+            mid = mat_info["mid"]
+            rho = mat_info["rho"]
             seg_name = self._get_segment_name(v)
-            f.write(f"{v} like 1 but mat=2 rho=-1.06 u={v} imp:p=1 imp:e=1 $ {seg_name}\n")
+            f.write(f"{v} like 1 but mat={mid} rho=-{rho} u={v} imp:p=1 imp:e=1 $ {seg_name}\n")
 
     def _get_segment_name(self, phantom_idx):
         """Retorna el nombre del segmento para un indice phantom."""
@@ -476,11 +519,12 @@ class MCNPInputGenerator:
                 return name
         return f"idx_{phantom_idx}"
 
-    def _write_lattice(self, f, phantom_arr, dims, spacing, flip_rows=False):
+    def _write_lattice(self, f, phantom_arr, dims, spacing):
         """
         Escribe lattice wrapper + fill data con RLE.
         Cell 101 = fill wrapper, Cell 102 = lattice.
         SIN closure cells.
+        NOTA: flips (Y/Z) ya aplicados en generate() antes de llegar aqui.
         """
         nx, ny, nz = dims
 
@@ -489,20 +533,18 @@ class MCNPInputGenerator:
         f.write("102 0 -2 lat=1 u=101 imp:p=1 imp:e=1\n")
         f.write(f"                              fill=0:{nx-1} 0:{ny-1} 0:{nz-1} \n")
 
-        # Fill data con RLE
-        self._write_rle_fill(f, phantom_arr, nx, ny, nz, flip_rows)
+        # Fill data con RLE (sin flip, ya aplicado en generate())
+        self._write_rle_fill(f, phantom_arr, nx, ny, nz)
 
         # Outside world cell
         f.write("9999 0 1 imp:p=0 imp:e=0\n")
         f.write("\n")
 
-    def _write_rle_fill(self, f, phantom_arr, nx, ny, nz, flip_rows=False):
+    def _write_rle_fill(self, f, phantom_arr, nx, ny, nz):
         """
         Escribe fill de voxeles con RLE estilo MATLAB.
+        NOTA: flips ya aplicados en generate(), no se pasan aqui.
         """
-        if flip_rows:
-            phantom_arr = phantom_arr[:, ::-1, :]
-            logger.info("  Flip Y aplicado antes de RLE")
 
         col = 0
         line = "      "  # 6 espacios de indentacion
@@ -568,7 +610,6 @@ class MCNPInputGenerator:
         ym = round(ny * sy_cm, 4)
         zm = round(nz * sz_cm, 4)
 
-        f.write("\n")
         f.write("c Superficies \n")
         f.write(f"c Tamano del voxel:  dx= {sx_cm} dy= {sy_cm} dz= {sz_cm} \n")
         f.write(f"c Tamano de la imagen:  [ {nx} {ny} {nz} ] \n")
@@ -618,7 +659,6 @@ class MCNPInputGenerator:
 
         logger.info(f"  Fuente: {n_active} voxeles activos")
 
-        f.write("\n")
         f.write("c FUENTE \n")
         f.write("c sdef erg d1 x d2 y d3 z d4 cell d5  par e \n")
         f.write("sdef par=d1 wgt=1.00033788800193 erg=fpar=d6 x=d2 y=d3 z=d4 cell=d5\n")
@@ -658,22 +698,31 @@ class MCNPInputGenerator:
                 col += len(token)
         f.write(line + "\n")
 
-        # Pesos uniformes
+        # Pesos uniformes — DOS COLUMNAS (2 valores por linea, formato MCNP compacto)
         f.write("sp5")
-        col = 4
-        line = ""
         w = 1.0 / n_active if n_active > 0 else 1.0
-        for n in range(n_active):
-            token = f" {w:.12e}"
-            if col + len(token) > 72:
-                f.write(line + "\n")
-                f.write("     ")
-                line = token
-                col = 5 + len(token)
+        fmt_val = f"{w:.12e}"
+        # Primera linea: sp5 + 1 o 2 valores
+        if n_active >= 2:
+            f.write(f" {fmt_val} {fmt_val}")
+            n_written = 2
+        elif n_active == 1:
+            f.write(f" {fmt_val}")
+            n_written = 1
+        else:
+            n_written = 0
+        # Lineas siguientes: indent 5 espacios + 2 valores
+        while n_written < n_active:
+            f.write("\n")
+            f.write("     ")  # 5 espacios de continuacion MCNP
+            if n_written + 1 < n_active:
+                f.write(f"{fmt_val} {fmt_val}")
+                n_written += 2
             else:
-                line += token
-                col += len(token)
-        f.write(line + "\n")
+                f.write(f"{fmt_val}")
+                n_written += 1
+        if n_active > 0:
+            f.write("\n")
 
         f.write(f"c Se generaron N fuentes: {n_active}\n")
 
@@ -685,7 +734,6 @@ class MCNPInputGenerator:
         ym = round(ny * sy / 10.0, 4)
         zm = round(nz * sz / 10.0, 4)
 
-        f.write("\n")
         f.write("c\n")
         f.write("c TALLY \n")
         f.write("c Tally de verificacion \n")
@@ -700,22 +748,166 @@ class MCNPInputGenerator:
         f.write(f"corc1  0  {nz-1}i   {zm} \n")
         f.write("c\n")
         f.write("endmd \n")
-        f.write("\n")
+
+    def _write_random_tallies(self, f, phantom_arr, dims, spacing,
+                               patient_id="3Dosim",
+                               n_liver=5, n_tumor=10,
+                               flip_y=False, flip_z=False):
+        """
+        Genera *f8 point detectors aleatorios en higado y tumor.
+
+        Replica f_genero_tally.m de MATLAB:
+          - n_liver tallies en voxeles aleatorios de higado (phantom_idx=90)
+          - n_tumor tallies en voxeles aleatorios de tumor (phantom_idx=100)
+          - Compensa flips en Y/Z para coordenadas MCNP
+          - fc18 con IDPatient y fecha
+          - Numeracion: *f18, *f28, ..., *f{10+n}8
+
+        Args:
+            f: file handle
+            phantom_arr: array 3D con indices phantom
+            dims: (nx, ny, nz)
+            spacing: (sx, sy, sz) en mm
+            patient_id: identificador del paciente
+            n_liver: cantidad de tallies en higado
+            n_tumor: cantidad de tallies en tumor
+            flip_y: si se aplico flip en Y
+            flip_z: si se aplico flip en Z
+        """
+        import datetime
+        nx, ny, nz = dims
+        now = datetime.datetime.now()
+        tally_num = 0
+
+        f.write("c\n")
+        f.write("c Tally de verificacion \n")
+        f.write(f"fc18 IDPatient:  {patient_id}  Fecha: {now.strftime('%d-%b-%Y')}\n")
+
+        # --- Tallies en Higado (phantom_idx=90) ---
+        liver_indices = np.where(phantom_arr == 90)
+        n_avail_liver = len(liver_indices[0])
+
+        if n_avail_liver > 0 and n_liver > 0:
+            n_actual = min(n_liver, n_avail_liver)
+            selected = np.random.choice(n_avail_liver, size=n_actual, replace=False)
+            for i in selected:
+                tally_num += 1
+                # Coordenadas MATLAB (1-based)
+                mx, my, mz = (liver_indices[0][i] + 1,
+                              liver_indices[1][i] + 1,
+                              liver_indices[2][i] + 1)
+                # Coordenadas MCNP (0-based) con compensacion de flip
+                x1 = mx - 1
+                if flip_y:
+                    y1 = ny - my  # compensacion flip Y
+                else:
+                    y1 = my - 1
+                if flip_z:
+                    z1 = nz - mz  # compensacion flip Z
+                else:
+                    z1 = mz - 1
+                cell_val = int(phantom_arr[liver_indices[0][i],
+                                           liver_indices[1][i],
+                                           liver_indices[2][i]])
+                f.write(f"c *f{tally_num}8  MeV  Higado \n")
+                f.write(f"c Posicion MATLAB  [{mx} {my} {mz}] \n")
+                f.write(f"*f{tally_num}8:e (101 <102 [{x1} {y1} {z1}]) \n")
+
+        # --- Tallies en Tumor (phantom_idx=100) ---
+        tumor_indices = np.where(phantom_arr == 100)
+        n_avail_tumor = len(tumor_indices[0])
+
+        if n_avail_tumor > 0 and n_tumor > 0:
+            n_actual = min(n_tumor, n_avail_tumor)
+            selected = np.random.choice(n_avail_tumor, size=n_actual, replace=False)
+            for i in selected:
+                tally_num += 1
+                mx, my, mz = (tumor_indices[0][i] + 1,
+                              tumor_indices[1][i] + 1,
+                              tumor_indices[2][i] + 1)
+                x1 = mx - 1
+                if flip_y:
+                    y1 = ny - my
+                else:
+                    y1 = my - 1
+                if flip_z:
+                    z1 = nz - mz
+                else:
+                    z1 = mz - 1
+                cell_val = int(phantom_arr[tumor_indices[0][i],
+                                           tumor_indices[1][i],
+                                           tumor_indices[2][i]])
+                f.write(f"c *f{tally_num}8  MeV  Tumor\n")
+                f.write(f"c Posicion MATLAB  [{mx} {my} {mz}] \n")
+                f.write(f"*f{tally_num}8:e (101 <102 [{x1} {y1} {z1}]) \n")
 
     def _write_materials(self, f):
-        """Escribe tarjetas de materiales MCNP: m1 (aire) + m2 (tejido blando)."""
+        """
+        Escribe tarjetas de materiales MCNP desde TissueConfig.
+
+        Formato MATLAB de referencia:
+          c MATERIALES
+          c Aire Dry (near sea level)
+          c densidad [g/cm^3]:  0.001205
+          c suma de composicion:  1
+          m1          6000            -0.000124
+
+        NOTA: las fracciones de masa se escriben NEGATIVAS (convencion MCNP).
+        """
         f.write("c \n")
         f.write("c MATERIALES\n")
+        f.write("c\n")
 
-        # m1 = Aire
-        f.write("c Aire Dry (near sea level)\n")
-        f.write("c densidad [g/cm^3]:   0.001205 \n")
-        f.write("c suma de composicion:   0.9997 \n")
-        for mid, comp in MAT_COMPOSITIONS.items():
-            f.write(f"m{mid}")
-            for z, frac in comp:
-                f.write(f"          {z}            {frac} \n")
-            f.write("\n")
+        # Construir mapa inverso: mid -> lista de indices phantom que lo usan
+        # para poder acceder al nombre_matlab y densidad
+        mid_to_tissue: dict[int, dict] = {}
+        for t in self.config.get_all_tissues():
+            mat = t.get("mcnp_material", {})
+            if not mat:
+                continue
+            mid = int(mat["id"])
+            mid_to_tissue[mid] = t
+
+        # IDs de material realmente presentes en el phantom
+        phantom_indices = sorted(set(self._phantom_to_mat.keys()))
+        mat_ids_used: set[int] = set()
+        for idx in phantom_indices:
+            if idx == 0:
+                continue
+            info = self._phantom_to_mat.get(idx)
+            if info:
+                mat_ids_used.add(info["mid"])
+
+        if not mat_ids_used:
+            mat_ids_used = {1, 2}  # fallback: aire + tejido
+
+        for mid in sorted(mat_ids_used):
+            comp = self._compositions.get(mid)
+            if not comp:
+                logger.warning(f"Material m{mid} sin composicion definida, omitiendo")
+                continue
+
+            # Obtener metadata del tejido para esta mid
+            tissue = mid_to_tissue.get(mid)
+            if tissue:
+                mat_name = tissue.get("name_matlab", tissue["name"])
+                density = tissue["density_gcm3"]
+            else:
+                mat_name = f"Material_{mid}"
+                density = 1.0
+
+            # Calcular suma de composicion (valores absolutos)
+            sum_comp = sum(abs(frac) for _, frac in comp)
+
+            # Escribir bloque de comentarios + tarjeta M
+            f.write(f"c {mat_name}\n")
+            f.write(f"c densidad [g/cm^3]:  {density:.4f} \n")
+            f.write(f"c suma de composicion:  {sum_comp:.4f} \n")
+            # Formato MATLAB: m{id} + 1er elemento en la misma linea
+            first_zaid, first_frac = comp[0]
+            f.write(f"m{mid}          {first_zaid}            {-first_frac:.6f}\n")
+            for zaid, frac in comp[1:]:
+                f.write(f"          {zaid}            {-frac:.6f}\n")
 
     def _write_footer(self, f, n_particles):
         """Escribe RAND, DBCN, PRINT, PRDMP, NPS."""

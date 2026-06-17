@@ -1,20 +1,21 @@
 {
-  "schema_version": "1.0",
-  "description": "Configuracion de tejidos para el phantom dosimetrico 3Dosim",
+  "schema_version": "1.1",
+  "description": "Configuracion de tejidos para el phantom dosimetrico 3Dosim. IDs secuenciales 1-6 (MATLAB compat).",
   "tissues": [
     {
       "index": 1,
       "name": "Aire",
       "name_en": "Air",
+      "name_matlab": "Aire Dry (near sea level)",
       "color": [0.0, 0.0, 0.0],
       "hu_range": [-1024, -900],
-      "density_gcm3": 0.001,
+      "density_gcm3": 0.001205,
       "mcnp_material": {
         "id": 1,
         "composition": {
           "6000": 0.000124,
-          "7014": 0.755268,
-          "8016": 0.231781,
+          "7000": 0.755268,
+          "8000": 0.231481,
           "18000": 0.012827
         }
       }
@@ -23,16 +24,17 @@
       "index": 30,
       "name": "Tejido_blando",
       "name_en": "Soft_tissue",
+      "name_matlab": "Soft Tissue (ICRU 44)",
       "color": [0.5, 0.3, 0.1],
       "hu_range": [-200, 150],
-      "density_gcm3": 1.04,
+      "density_gcm3": 1.06,
       "mcnp_material": {
-        "id": 30,
+        "id": 2,
         "composition": {
-          "1000": 0.101,
-          "6000": 0.111,
-          "7014": 0.020,
-          "8016": 0.762,
+          "1000": 0.105,
+          "6000": 0.143,
+          "7000": 0.034,
+          "8000": 0.708,
           "11000": 0.002,
           "15000": 0.003,
           "16000": 0.003,
@@ -42,63 +44,22 @@
       }
     },
     {
-      "index": 50,
-      "name": "Pulmon",
-      "name_en": "Lung",
-      "color": [0.8, 0.6, 0.9],
-      "hu_range": [-900, -500],
-      "density_gcm3": 0.26,
-      "mcnp_material": {
-        "id": 50,
-        "composition": {
-          "1000": 0.103,
-          "6000": 0.105,
-          "7014": 0.031,
-          "8016": 0.749,
-          "11000": 0.002,
-          "15000": 0.002,
-          "16000": 0.003,
-          "17000": 0.003,
-          "19000": 0.002
-        }
-      }
-    },
-    {
-      "index": 80,
-      "name": "Hueso",
-      "name_en": "Bone",
-      "color": [0.9, 0.9, 0.9],
-      "hu_range": [150, 2000],
-      "density_gcm3": 1.4,
-      "mcnp_material": {
-        "id": 80,
-        "composition": {
-          "1000": 0.064,
-          "6000": 0.228,
-          "7014": 0.027,
-          "8016": 0.436,
-          "12000": 0.002,
-          "15000": 0.070,
-          "20000": 0.173
-        }
-      }
-    },
-    {
       "index": 90,
       "name": "Higado",
       "name_en": "Liver",
+      "name_matlab": "Liver (ICRP 110)",
       "color": [0.6, 0.2, 0.0],
       "hu_range": [50, 150],
-      "density_gcm3": 1.06,
+      "density_gcm3": 1.05,
       "mcnp_material": {
-        "id": 90,
+        "id": 3,
         "composition": {
           "1000": 0.102,
-          "6000": 0.142,
-          "7014": 0.020,
-          "8016": 0.726,
+          "6000": 0.131,
+          "7000": 0.031,
+          "8000": 0.724,
           "11000": 0.002,
-          "15000": 0.003,
+          "15000": 0.002,
           "16000": 0.003,
           "17000": 0.002,
           "19000": 0.003
@@ -109,21 +70,66 @@
       "index": 100,
       "name": "Tumor",
       "name_en": "Tumor",
+      "name_matlab": "Tumor",
       "color": [1.0, 0.0, 0.0],
       "hu_range": [50, 150],
-      "density_gcm3": 1.06,
+      "density_gcm3": 1.05,
       "mcnp_material": {
-        "id": 100,
+        "id": 4,
         "composition": {
           "1000": 0.102,
-          "6000": 0.142,
-          "7014": 0.020,
-          "8016": 0.726,
+          "6000": 0.131,
+          "7000": 0.031,
+          "8000": 0.724,
           "11000": 0.002,
-          "15000": 0.003,
+          "15000": 0.002,
           "16000": 0.003,
           "17000": 0.002,
           "19000": 0.003
+        }
+      }
+    },
+    {
+      "index": 50,
+      "name": "Pulmon",
+      "name_en": "Lung",
+      "name_matlab": "Lung (ICRP 110)",
+      "color": [0.8, 0.6, 0.9],
+      "hu_range": [-900, -500],
+      "density_gcm3": 0.382,
+      "mcnp_material": {
+        "id": 5,
+        "composition": {
+          "1000": 0.103,
+          "6000": 0.107,
+          "7000": 0.022,
+          "8000": 0.644,
+          "11000": 0.010,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.001,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 80,
+      "name": "Hueso",
+      "name_en": "Bone",
+      "name_matlab": "Bone (ICRP 110)",
+      "color": [0.9, 0.9, 0.9],
+      "hu_range": [150, 2000],
+      "density_gcm3": 1.92,
+      "mcnp_material": {
+        "id": 6,
+        "composition": {
+          "1000": 0.064,
+          "6000": 0.228,
+          "7000": 0.027,
+          "8000": 0.436,
+          "12000": 0.002,
+          "15000": 0.070,
+          "20000": 0.173
         }
       }
     }
