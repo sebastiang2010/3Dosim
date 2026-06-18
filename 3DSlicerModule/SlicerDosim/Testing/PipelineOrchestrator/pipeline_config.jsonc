@@ -8,10 +8,10 @@
 {
     // Directorio donde se guardan las escenas .mrb (snapshots del estado de Slicer)
     // Se crea automaticamente si no existe.
-    "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
+    "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/scenes",
 
-    // Directorio de output por defecto (relativo a data_dir/../resultados_test)
-    "output_dir_rel": "C:/MAT/3Dosim/ai-pipe/mcnp_input",
+    // Directorio base de output (contiene screenshots/, mcnp_input/, labelmaps/, etc)
+    "output_dir_rel": "C:/MAT/3Dosim/ai-pipe",
 
     // Configuracion de visualizacion medica
     "views": {
