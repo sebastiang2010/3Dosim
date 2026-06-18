@@ -66,8 +66,14 @@ class TissueConfig:
             self._by_index[t["index"]] = t
 
         # TS mapping: keys como strings en JSON, convertir a int
+        # Valores pueden ser int directo o dict con "index"
         ts_raw = self._raw.get("ts_label_to_phantom", {})
-        self._ts_mapping: dict[int, int] = {int(k): v for k, v in ts_raw.items()}
+        self._ts_mapping: dict[int, int] = {}
+        for k, v in ts_raw.items():
+            if isinstance(v, dict):
+                self._ts_mapping[int(k)] = v["index"]
+            else:
+                self._ts_mapping[int(k)] = v
 
         self._body_labels: set[int] = set(self._raw.get("ts_body_labels", []))
 

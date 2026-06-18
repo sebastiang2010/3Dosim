@@ -127,7 +127,8 @@ def _build_segment_name_to_phantom(segmentation_node, tissue_config: dict) -> di
         # Intentar por ID numerico (TS label)
         idx = None
         if sid.isdigit() and sid in ts_label_map:
-            idx = ts_label_map[sid]
+            entry = ts_label_map[sid]
+            idx = entry["index"] if isinstance(entry, dict) else entry
 
         if idx is None:
             idx = DEFAULT_NAME_TO_PHANTOM.get(seg_name, None)

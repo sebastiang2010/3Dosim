@@ -1760,123 +1760,708 @@
     }
   ],
   "ts_label_to_phantom": {
-    "1": 1,
-    "2": 135,
-    "3": 135,
-    "4": 145,
-    "5": 90,
-    "6": 136,
-    "7": 131,
-    "8": 143,
-    "9": 143,
-    "10": 50,
-    "11": 50,
-    "12": 50,
-    "13": 50,
-    "14": 50,
-    "15": 50,
-    "16": 145,
-    "17": 140,
-    "18": 137,
-    "19": 137,
-    "20": 138,
-    "21": 141,
-    "22": 146,
-    "23": 135,
-    "24": 135,
-    "25": 80,
-    "26": 80,
-    "27": 80,
-    "28": 80,
-    "29": 80,
-    "30": 80,
-    "31": 80,
-    "32": 80,
-    "33": 80,
-    "34": 80,
-    "35": 80,
-    "36": 80,
-    "37": 80,
-    "38": 80,
-    "39": 80,
-    "40": 80,
-    "41": 80,
-    "42": 80,
-    "43": 80,
-    "44": 80,
-    "45": 80,
-    "46": 80,
-    "47": 80,
-    "48": 80,
-    "49": 80,
-    "50": 80,
-    "51": 133,
-    "52": 128,
-    "53": 128,
-    "54": 128,
-    "55": 128,
-    "56": 128,
-    "57": 128,
-    "58": 128,
-    "59": 128,
-    "60": 128,
-    "61": 133,
-    "62": 128,
-    "63": 80,
-    "64": 80,
-    "65": 80,
-    "66": 80,
-    "67": 80,
-    "68": 80,
-    "69": 80,
-    "70": 80,
-    "71": 80,
-    "72": 80,
-    "73": 80,
-    "74": 80,
-    "75": 80,
-    "76": 80,
-    "77": 80,
-    "78": 80,
-    "79": 80,
-    "80": 80,
-    "81": 80,
-    "82": 80,
-    "83": 80,
-    "84": 80,
-    "85": 80,
-    "86": 80,
-    "87": 80,
-    "88": 80,
-    "89": 80,
-    "90": 80,
-    "91": 80,
-    "92": 80,
-    "93": 80,
-    "94": 80,
-    "95": 80,
-    "96": 80,
-    "97": 80,
-    "98": 80,
-    "99": 80,
-    "100": 80,
-    "101": 80,
-    "102": 80,
-    "103": 80,
-    "104": 80,
-    "105": 80,
-    "106": 80,
-    "107": 80,
-    "108": 80,
-    "109": 80,
-    "110": 80,
-    "111": 80,
-    "112": 80,
-    "113": 80,
-    "114": 80,
-    "115": 80,
-    "116": 80,
-    "117": 126
+    "1": {
+      "index": 1,
+      "segment": "background / air",
+      "material_en": "Air",
+      "material_es": "Aire"
+    },
+    "2": {
+      "index": 135,
+      "segment": "kidney_right",
+      "material_en": "Kidneys",
+      "material_es": "Rinones"
+    },
+    "3": {
+      "index": 135,
+      "segment": "kidney_left",
+      "material_en": "Kidneys",
+      "material_es": "Rinones"
+    },
+    "4": {
+      "index": 145,
+      "segment": "gallbladder",
+      "material_en": "Gallbladder, Pituitary gland, Trachea, Thymus, Tonsils, Ureters, ...",
+      "material_es": "Tejido_mixto"
+    },
+    "5": {
+      "index": 90,
+      "segment": "liver",
+      "material_en": "Liver",
+      "material_es": "Higado"
+    },
+    "6": {
+      "index": 136,
+      "segment": "stomach",
+      "material_en": "Stomach",
+      "material_es": "Estomago"
+    },
+    "7": {
+      "index": 131,
+      "segment": "pancreas",
+      "material_en": "Pancreas",
+      "material_es": "Pancreas"
+    },
+    "8": {
+      "index": 143,
+      "segment": "adrenal_gland_right",
+      "material_en": "Adrenals",
+      "material_es": "Suprarrenales"
+    },
+    "9": {
+      "index": 143,
+      "segment": "adrenal_gland_left",
+      "material_en": "Adrenals",
+      "material_es": "Suprarrenales"
+    },
+    "10": {
+      "index": 50,
+      "segment": "lung_upper_lobe_left",
+      "material_en": "Lung",
+      "material_es": "Pulmon"
+    },
+    "11": {
+      "index": 50,
+      "segment": "lung_lower_lobe_left",
+      "material_en": "Lung",
+      "material_es": "Pulmon"
+    },
+    "12": {
+      "index": 50,
+      "segment": "lung_upper_lobe_right",
+      "material_en": "Lung",
+      "material_es": "Pulmon"
+    },
+    "13": {
+      "index": 50,
+      "segment": "lung_middle_lobe_right",
+      "material_en": "Lung",
+      "material_es": "Pulmon"
+    },
+    "14": {
+      "index": 50,
+      "segment": "lung_lower_lobe_right",
+      "material_en": "Lung",
+      "material_es": "Pulmon"
+    },
+    "15": {
+      "index": 50,
+      "segment": "esophagus",
+      "material_en": "Lung",
+      "material_es": "Pulmon"
+    },
+    "16": {
+      "index": 145,
+      "segment": "trachea",
+      "material_en": "Gallbladder, Pituitary gland, Trachea, Thymus, Tonsils, Ureters, ...",
+      "material_es": "Tejido_mixto"
+    },
+    "17": {
+      "index": 140,
+      "segment": "thyroid_gland",
+      "material_en": "Thyroid",
+      "material_es": "Tiroides"
+    },
+    "18": {
+      "index": 137,
+      "segment": "small_bowel",
+      "material_en": "Small intestine",
+      "material_es": "Intestino_delgado"
+    },
+    "19": {
+      "index": 137,
+      "segment": "duodenum",
+      "material_en": "Small intestine",
+      "material_es": "Intestino_delgado"
+    },
+    "20": {
+      "index": 138,
+      "segment": "colon",
+      "material_en": "Large intestine",
+      "material_es": "Intestino_grueso"
+    },
+    "21": {
+      "index": 141,
+      "segment": "urinary_bladder",
+      "material_en": "Urinary bladder",
+      "material_es": "Veijga_urinaria"
+    },
+    "22": {
+      "index": 146,
+      "segment": "prostate",
+      "material_en": "Prostate",
+      "material_es": "Prostata"
+    },
+    "23": {
+      "index": 135,
+      "segment": "kidney_cyst_left",
+      "material_en": "Kidneys",
+      "material_es": "Rinones"
+    },
+    "24": {
+      "index": 135,
+      "segment": "kidney_cyst_right",
+      "material_en": "Kidneys",
+      "material_es": "Rinones"
+    },
+    "25": {
+      "index": 80,
+      "segment": "sacrum",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "26": {
+      "index": 80,
+      "segment": "vertebrae_S1",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "27": {
+      "index": 80,
+      "segment": "vertebrae_L5",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "28": {
+      "index": 80,
+      "segment": "vertebrae_L4",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "29": {
+      "index": 80,
+      "segment": "vertebrae_L3",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "30": {
+      "index": 80,
+      "segment": "vertebrae_L2",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "31": {
+      "index": 80,
+      "segment": "vertebrae_L1",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "32": {
+      "index": 80,
+      "segment": "vertebrae_T12",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "33": {
+      "index": 80,
+      "segment": "vertebrae_T11",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "34": {
+      "index": 80,
+      "segment": "vertebrae_T10",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "35": {
+      "index": 80,
+      "segment": "vertebrae_T9",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "36": {
+      "index": 80,
+      "segment": "vertebrae_T8",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "37": {
+      "index": 80,
+      "segment": "vertebrae_T7",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "38": {
+      "index": 80,
+      "segment": "vertebrae_T6",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "39": {
+      "index": 80,
+      "segment": "vertebrae_T5",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "40": {
+      "index": 80,
+      "segment": "vertebrae_T4",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "41": {
+      "index": 80,
+      "segment": "vertebrae_T3",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "42": {
+      "index": 80,
+      "segment": "vertebrae_T2",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "43": {
+      "index": 80,
+      "segment": "vertebrae_T1",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "44": {
+      "index": 80,
+      "segment": "vertebrae_C7",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "45": {
+      "index": 80,
+      "segment": "vertebrae_C6",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "46": {
+      "index": 80,
+      "segment": "vertebrae_C5",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "47": {
+      "index": 80,
+      "segment": "vertebrae_C4",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "48": {
+      "index": 80,
+      "segment": "vertebrae_C3",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "49": {
+      "index": 80,
+      "segment": "vertebrae_C2",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "50": {
+      "index": 80,
+      "segment": "vertebrae_C1",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "51": {
+      "index": 133,
+      "segment": "heart",
+      "material_en": "Heart",
+      "material_es": "Corazon"
+    },
+    "52": {
+      "index": 128,
+      "segment": "aorta",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "53": {
+      "index": 128,
+      "segment": "pulmonary_vein",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "54": {
+      "index": 128,
+      "segment": "brachiocephalic_trunk",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "55": {
+      "index": 128,
+      "segment": "subclavian_artery_right",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "56": {
+      "index": 128,
+      "segment": "subclavian_artery_left",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "57": {
+      "index": 128,
+      "segment": "common_carotid_artery_right",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "58": {
+      "index": 128,
+      "segment": "common_carotid_artery_left",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "59": {
+      "index": 128,
+      "segment": "brachiocephalic_vein_left",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "60": {
+      "index": 128,
+      "segment": "brachiocephalic_vein_right",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "61": {
+      "index": 133,
+      "segment": "atrial_appendage_left",
+      "material_en": "Heart",
+      "material_es": "Corazon"
+    },
+    "62": {
+      "index": 128,
+      "segment": "superior_vena_cava",
+      "material_en": "Blood",
+      "material_es": "Sangre"
+    },
+    "63": {
+      "index": 80,
+      "segment": "inferior_vena_cava",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "64": {
+      "index": 80,
+      "segment": "portal_vein_and_splenic_vein",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "65": {
+      "index": 80,
+      "segment": "iliac_artery_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "66": {
+      "index": 80,
+      "segment": "iliac_artery_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "67": {
+      "index": 80,
+      "segment": "iliac_vena_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "68": {
+      "index": 80,
+      "segment": "iliac_vena_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "69": {
+      "index": 80,
+      "segment": "humerus_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "70": {
+      "index": 80,
+      "segment": "humerus_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "71": {
+      "index": 80,
+      "segment": "scapula_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "72": {
+      "index": 80,
+      "segment": "scapula_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "73": {
+      "index": 80,
+      "segment": "clavicula_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "74": {
+      "index": 80,
+      "segment": "clavicula_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "75": {
+      "index": 80,
+      "segment": "femur_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "76": {
+      "index": 80,
+      "segment": "femur_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "77": {
+      "index": 80,
+      "segment": "hip_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "78": {
+      "index": 80,
+      "segment": "hip_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "79": {
+      "index": 80,
+      "segment": "spinal_cord",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "80": {
+      "index": 80,
+      "segment": "gluteus_maximus_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "81": {
+      "index": 80,
+      "segment": "gluteus_maximus_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "82": {
+      "index": 80,
+      "segment": "gluteus_medius_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "83": {
+      "index": 80,
+      "segment": "gluteus_medius_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "84": {
+      "index": 80,
+      "segment": "gluteus_minimus_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "85": {
+      "index": 80,
+      "segment": "gluteus_minimus_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "86": {
+      "index": 80,
+      "segment": "autochthon_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "87": {
+      "index": 80,
+      "segment": "autochthon_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "88": {
+      "index": 80,
+      "segment": "iliopsoas_left",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "89": {
+      "index": 80,
+      "segment": "iliopsoas_right",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "90": {
+      "index": 80,
+      "segment": "brain",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "91": {
+      "index": 80,
+      "segment": "skull",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "92": {
+      "index": 80,
+      "segment": "rib_left_1",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "93": {
+      "index": 80,
+      "segment": "rib_left_2",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "94": {
+      "index": 80,
+      "segment": "rib_left_3",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "95": {
+      "index": 80,
+      "segment": "rib_left_4",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "96": {
+      "index": 80,
+      "segment": "rib_left_5",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "97": {
+      "index": 80,
+      "segment": "rib_left_6",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "98": {
+      "index": 80,
+      "segment": "rib_left_7",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "99": {
+      "index": 80,
+      "segment": "rib_left_8",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "100": {
+      "index": 80,
+      "segment": "rib_left_9",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "101": {
+      "index": 80,
+      "segment": "rib_left_10",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "102": {
+      "index": 80,
+      "segment": "rib_left_11",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "103": {
+      "index": 80,
+      "segment": "rib_left_12",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "104": {
+      "index": 80,
+      "segment": "rib_right_1",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "105": {
+      "index": 80,
+      "segment": "rib_right_2",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "106": {
+      "index": 80,
+      "segment": "rib_right_3",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "107": {
+      "index": 80,
+      "segment": "rib_right_4",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "108": {
+      "index": 80,
+      "segment": "rib_right_5",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "109": {
+      "index": 80,
+      "segment": "rib_right_6",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "110": {
+      "index": 80,
+      "segment": "rib_right_7",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "111": {
+      "index": 80,
+      "segment": "rib_right_8",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "112": {
+      "index": 80,
+      "segment": "rib_right_9",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "113": {
+      "index": 80,
+      "segment": "rib_right_10",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "114": {
+      "index": 80,
+      "segment": "rib_right_11",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "115": {
+      "index": 80,
+      "segment": "rib_right_12",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "116": {
+      "index": 80,
+      "segment": "sternum",
+      "material_en": "Bone",
+      "material_es": "Hueso"
+    },
+    "117": {
+      "index": 126,
+      "segment": "costal_cartilages",
+      "material_en": "Cartilage",
+      "material_es": "Cartilago"
+    }
   },
   "ts_body_labels": [
     2,
