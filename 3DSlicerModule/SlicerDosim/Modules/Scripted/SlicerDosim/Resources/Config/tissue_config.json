@@ -1,14 +1,21 @@
 {
   "schema_version": "1.1",
-  "description": "Configuracion de tejidos para el phantom dosimetrico 3Dosim. IDs secuenciales 1-6 (MATLAB compat).",
+  "description": "Configuracion de tejidos para el phantom dosimetrico 3Dosim. Contiene los 6 materiales base (indices 1,30,50,80,90,100) MAS los 53 materiales completos del ICRP-110 (indices 101-153).",
   "tissues": [
     {
       "index": 1,
       "name": "Aire",
       "name_en": "Air",
       "name_matlab": "Aire Dry (near sea level)",
-      "color": [0.0, 0.0, 0.0],
-      "hu_range": [-1024, -900],
+      "color": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hu_range": [
+        -1024,
+        -900
+      ],
       "density_gcm3": 0.001205,
       "mcnp_material": {
         "id": 1,
@@ -25,8 +32,15 @@
       "name": "Tejido_blando",
       "name_en": "Soft_tissue",
       "name_matlab": "Soft Tissue (ICRU 44)",
-      "color": [0.5, 0.3, 0.1],
-      "hu_range": [-200, 150],
+      "color": [
+        0.5,
+        0.3,
+        0.1
+      ],
+      "hu_range": [
+        -200,
+        150
+      ],
       "density_gcm3": 1.06,
       "mcnp_material": {
         "id": 2,
@@ -48,8 +62,15 @@
       "name": "Higado",
       "name_en": "Liver",
       "name_matlab": "Liver (ICRP 110)",
-      "color": [0.6, 0.2, 0.0],
-      "hu_range": [50, 150],
+      "color": [
+        0.6,
+        0.2,
+        0.0
+      ],
+      "hu_range": [
+        50,
+        150
+      ],
       "density_gcm3": 1.05,
       "mcnp_material": {
         "id": 3,
@@ -71,8 +92,15 @@
       "name": "Tumor",
       "name_en": "Tumor",
       "name_matlab": "Tumor",
-      "color": [1.0, 0.0, 0.0],
-      "hu_range": [50, 150],
+      "color": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "hu_range": [
+        50,
+        150
+      ],
       "density_gcm3": 1.05,
       "mcnp_material": {
         "id": 4,
@@ -94,8 +122,15 @@
       "name": "Pulmon",
       "name_en": "Lung",
       "name_matlab": "Lung (ICRP 110)",
-      "color": [0.8, 0.6, 0.9],
-      "hu_range": [-900, -500],
+      "color": [
+        0.8,
+        0.6,
+        0.9
+      ],
+      "hu_range": [
+        -900,
+        -500
+      ],
       "density_gcm3": 0.382,
       "mcnp_material": {
         "id": 5,
@@ -104,7 +139,7 @@
           "6000": 0.107,
           "7000": 0.022,
           "8000": 0.644,
-          "11000": 0.010,
+          "11000": 0.01,
           "15000": 0.002,
           "16000": 0.003,
           "17000": 0.001,
@@ -117,8 +152,15 @@
       "name": "Hueso",
       "name_en": "Bone",
       "name_matlab": "Bone (ICRP 110)",
-      "color": [0.9, 0.9, 0.9],
-      "hu_range": [150, 2000],
+      "color": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "hu_range": [
+        150,
+        2000
+      ],
       "density_gcm3": 1.92,
       "mcnp_material": {
         "id": 6,
@@ -128,30 +170,1701 @@
           "7000": 0.027,
           "8000": 0.436,
           "12000": 0.002,
-          "15000": 0.070,
+          "15000": 0.07,
           "20000": 0.173
+        }
+      }
+    },
+    {
+      "index": 101,
+      "name": "Dientes",
+      "name_en": "Teeth",
+      "name_matlab": "ICRP-110: Teeth",
+      "color": [
+        0.9533,
+        0.9623,
+        0.9839
+      ],
+      "hu_range": [
+        150,
+        2000
+      ],
+      "density_gcm3": 2.75,
+      "mcnp_material": {
+        "id": 7,
+        "composition": {
+          "1000": 0.022,
+          "6000": 0.095,
+          "7000": 0.029,
+          "8000": 0.421,
+          "12000": 0.007,
+          "15000": 0.137,
+          "20000": 0.289
+        }
+      }
+    },
+    {
+      "index": 102,
+      "name": "Hueso_mineral",
+      "name_en": "Mineral bone",
+      "name_matlab": "ICRP-110: Mineral bone",
+      "color": [
+        0.7365,
+        0.8498,
+        0.5776
+      ],
+      "hu_range": [
+        150,
+        2000
+      ],
+      "density_gcm3": 1.92,
+      "mcnp_material": {
+        "id": 8,
+        "composition": {
+          "1000": 0.036,
+          "6000": 0.159,
+          "7000": 0.042,
+          "8000": 0.448,
+          "11000": 0.003,
+          "12000": 0.002,
+          "15000": 0.094,
+          "16000": 0.003,
+          "20000": 0.213
+        }
+      }
+    },
+    {
+      "index": 103,
+      "name": "Humero_proximal_esponjosa",
+      "name_en": "Humeri, upper half, spongiosa",
+      "name_matlab": "ICRP-110: Humeri, upper half, spongiosa",
+      "color": [
+        0.8979,
+        0.7099,
+        0.8745
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.205,
+      "mcnp_material": {
+        "id": 9,
+        "composition": {
+          "1000": 0.085,
+          "6000": 0.288,
+          "7000": 0.026,
+          "8000": 0.498,
+          "11000": 0.002,
+          "12000": 0.001,
+          "15000": 0.033,
+          "16000": 0.004,
+          "17000": 0.002,
+          "20000": 0.061
+        }
+      }
+    },
+    {
+      "index": 104,
+      "name": "Humero_distal_esponjosa",
+      "name_en": "Humeri, lower half, spongiosa",
+      "name_matlab": "ICRP-110: Humeri, lower half, spongiosa",
+      "color": [
+        0.7581,
+        0.936,
+        0.9062
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.108,
+      "mcnp_material": {
+        "id": 10,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.439,
+          "7000": 0.017,
+          "8000": 0.381,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.039
+        }
+      }
+    },
+    {
+      "index": 105,
+      "name": "Antebrazo_esponjosa",
+      "name_en": "Lower arm bones, spongiosa",
+      "name_matlab": "ICRP-110: Lower arm bones, spongiosa",
+      "color": [
+        0.9681,
+        0.9218,
+        0.8672
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.108,
+      "mcnp_material": {
+        "id": 11,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.439,
+          "7000": 0.017,
+          "8000": 0.381,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.039
+        }
+      }
+    },
+    {
+      "index": 106,
+      "name": "Mano_esponjosa",
+      "name_en": "Hand bones, spongiosa",
+      "name_matlab": "ICRP-110: Hand bones, spongiosa",
+      "color": [
+        0.5271,
+        0.4312,
+        0.8158
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.108,
+      "mcnp_material": {
+        "id": 12,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.439,
+          "7000": 0.017,
+          "8000": 0.381,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.039
+        }
+      }
+    },
+    {
+      "index": 107,
+      "name": "Clavicula_esponjosa",
+      "name_en": "Clavicles, spongiosa",
+      "name_matlab": "ICRP-110: Clavicles, spongiosa",
+      "color": [
+        0.5943,
+        0.8689,
+        0.582
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.151,
+      "mcnp_material": {
+        "id": 13,
+        "composition": {
+          "1000": 0.091,
+          "6000": 0.348,
+          "7000": 0.024,
+          "8000": 0.457,
+          "11000": 0.002,
+          "15000": 0.026,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.048
+        }
+      }
+    },
+    {
+      "index": 108,
+      "name": "Craneo_esponjosa",
+      "name_en": "Cranium, spongiosa",
+      "name_matlab": "ICRP-110: Cranium, spongiosa",
+      "color": [
+        0.956,
+        0.895,
+        0.9154
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.157,
+      "mcnp_material": {
+        "id": 14,
+        "composition": {
+          "1000": 0.09,
+          "6000": 0.335,
+          "7000": 0.025,
+          "8000": 0.467,
+          "11000": 0.002,
+          "15000": 0.026,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.049
+        }
+      }
+    },
+    {
+      "index": 109,
+      "name": "Femur_proximal_esponjosa",
+      "name_en": "Femora, upper half, spongiosa",
+      "name_matlab": "ICRP-110: Femora, upper half, spongiosa",
+      "color": [
+        0.9081,
+        0.9495,
+        0.9742
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.124,
+      "mcnp_material": {
+        "id": 15,
+        "composition": {
+          "1000": 0.094,
+          "6000": 0.385,
+          "7000": 0.022,
+          "8000": 0.43,
+          "11000": 0.002,
+          "15000": 0.022,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.041
+        }
+      }
+    },
+    {
+      "index": 110,
+      "name": "Femur_distal_esponjosa",
+      "name_en": "Femora, lower half, spongiosa",
+      "name_matlab": "ICRP-110: Femora, lower half, spongiosa",
+      "color": [
+        0.9493,
+        0.9609,
+        0.8195
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.108,
+      "mcnp_material": {
+        "id": 16,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.439,
+          "7000": 0.017,
+          "8000": 0.381,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.039
+        }
+      }
+    },
+    {
+      "index": 111,
+      "name": "Pierna_inferior_esponjosa",
+      "name_en": "Lower leg bones, spongiosa",
+      "name_matlab": "ICRP-110: Lower leg bones, spongiosa",
+      "color": [
+        0.7807,
+        0.5878,
+        0.8319
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.108,
+      "mcnp_material": {
+        "id": 17,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.439,
+          "7000": 0.017,
+          "8000": 0.381,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.039
+        }
+      }
+    },
+    {
+      "index": 112,
+      "name": "Pie_esponjosa",
+      "name_en": "Foot bones, spongiosa",
+      "name_matlab": "ICRP-110: Foot bones, spongiosa",
+      "color": [
+        0.8321,
+        0.9248,
+        0.8783
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.108,
+      "mcnp_material": {
+        "id": 18,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.439,
+          "7000": 0.017,
+          "8000": 0.381,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.001,
+          "20000": 0.039
+        }
+      }
+    },
+    {
+      "index": 113,
+      "name": "Mandibula_esponjosa",
+      "name_en": "Mandible, spongiosa",
+      "name_matlab": "ICRP-110: Mandible, spongiosa",
+      "color": [
+        0.8389,
+        0.4661,
+        0.369
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.228,
+      "mcnp_material": {
+        "id": 19,
+        "composition": {
+          "1000": 0.083,
+          "6000": 0.266,
+          "7000": 0.027,
+          "8000": 0.511,
+          "11000": 0.003,
+          "12000": 0.001,
+          "15000": 0.036,
+          "16000": 0.004,
+          "17000": 0.002,
+          "20000": 0.067
+        }
+      }
+    },
+    {
+      "index": 114,
+      "name": "Pelvis_esponjosa",
+      "name_en": "Pelvis, spongiosa",
+      "name_matlab": "ICRP-110: Pelvis, spongiosa",
+      "color": [
+        0.6248,
+        0.6466,
+        0.8811
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.123,
+      "mcnp_material": {
+        "id": 20,
+        "composition": {
+          "1000": 0.094,
+          "6000": 0.36,
+          "7000": 0.025,
+          "8000": 0.454,
+          "11000": 0.002,
+          "15000": 0.021,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.038
+        }
+      }
+    },
+    {
+      "index": 115,
+      "name": "Costillas_esponjosa",
+      "name_en": "Ribs, spongiosa",
+      "name_matlab": "ICRP-110: Ribs, spongiosa",
+      "color": [
+        0.7342,
+        0.8886,
+        0.6408
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.165,
+      "mcnp_material": {
+        "id": 21,
+        "composition": {
+          "1000": 0.089,
+          "6000": 0.292,
+          "7000": 0.029,
+          "8000": 0.507,
+          "11000": 0.002,
+          "15000": 0.026,
+          "16000": 0.004,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.048
+        }
+      }
+    },
+    {
+      "index": 116,
+      "name": "Escapula_esponjosa",
+      "name_en": "Scapulae, spongiosa",
+      "name_matlab": "ICRP-110: Scapulae, spongiosa",
+      "color": [
+        0.8123,
+        0.5995,
+        0.7418
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.183,
+      "mcnp_material": {
+        "id": 22,
+        "composition": {
+          "1000": 0.087,
+          "6000": 0.309,
+          "7000": 0.026,
+          "8000": 0.483,
+          "11000": 0.002,
+          "12000": 0.001,
+          "15000": 0.03,
+          "16000": 0.004,
+          "17000": 0.002,
+          "20000": 0.056
+        }
+      }
+    },
+    {
+      "index": 117,
+      "name": "Columna_cervical_esponjosa",
+      "name_en": "Cervical spine, spongiosa",
+      "name_matlab": "ICRP-110: Cervical spine, spongiosa",
+      "color": [
+        0.8427,
+        0.9566,
+        0.9613
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 23,
+        "composition": {
+          "1000": 0.103,
+          "6000": 0.4,
+          "7000": 0.027,
+          "8000": 0.444,
+          "11000": 0.001,
+          "15000": 0.007,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.012,
+          "26000": 0.001
+        }
+      }
+    },
+    {
+      "index": 118,
+      "name": "Columna_toracica_esponjosa",
+      "name_en": "Thoracic spine, spongiosa",
+      "name_matlab": "ICRP-110: Thoracic spine, spongiosa",
+      "color": [
+        0.9789,
+        0.9717,
+        0.9506
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.074,
+      "mcnp_material": {
+        "id": 24,
+        "composition": {
+          "1000": 0.099,
+          "6000": 0.376,
+          "7000": 0.027,
+          "8000": 0.459,
+          "11000": 0.001,
+          "15000": 0.012,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.02,
+          "26000": 0.001
+        }
+      }
+    },
+    {
+      "index": 119,
+      "name": "Columna_lumbar_esponjosa",
+      "name_en": "Lumbar spine, spongiosa",
+      "name_matlab": "ICRP-110: Lumbar spine, spongiosa",
+      "color": [
+        0.7187,
+        0.5678,
+        0.8988
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.112,
+      "mcnp_material": {
+        "id": 25,
+        "composition": {
+          "1000": 0.095,
+          "6000": 0.34,
+          "7000": 0.028,
+          "8000": 0.48,
+          "11000": 0.001,
+          "15000": 0.018,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.032
+        }
+      }
+    },
+    {
+      "index": 120,
+      "name": "Sacro_esponjosa",
+      "name_en": "Sacrum, spongiosa",
+      "name_matlab": "ICRP-110: Sacrum, spongiosa",
+      "color": [
+        0.4376,
+        0.833,
+        0.5025
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.031,
+      "mcnp_material": {
+        "id": 26,
+        "composition": {
+          "1000": 0.105,
+          "6000": 0.419,
+          "7000": 0.027,
+          "8000": 0.432,
+          "11000": 0.001,
+          "15000": 0.004,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.006,
+          "26000": 0.001
+        }
+      }
+    },
+    {
+      "index": 121,
+      "name": "Esternon_esponjosa",
+      "name_en": "Sternum, spongiosa",
+      "name_matlab": "ICRP-110: Sternum, spongiosa",
+      "color": [
+        0.9529,
+        0.7961,
+        0.8162
+      ],
+      "hu_range": [
+        50,
+        300
+      ],
+      "density_gcm3": 1.041,
+      "mcnp_material": {
+        "id": 27,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.409,
+          "7000": 0.027,
+          "8000": 0.438,
+          "11000": 0.001,
+          "15000": 0.006,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.001,
+          "20000": 0.009,
+          "26000": 0.001
+        }
+      }
+    },
+    {
+      "index": 122,
+      "name": "Cavidad_medular_humero_femur_proximal",
+      "name_en": "Humeri and femora, upper halves, medullary cavity",
+      "name_matlab": "ICRP-110: Humeri and femora, upper halves, medullary cavity",
+      "color": [
+        0.8766,
+        0.911,
+        0.9587
+      ],
+      "hu_range": [
+        -100,
+        100
+      ],
+      "density_gcm3": 0.98,
+      "mcnp_material": {
+        "id": 28,
+        "composition": {
+          "1000": 0.115,
+          "6000": 0.636,
+          "7000": 0.007,
+          "8000": 0.239,
+          "11000": 0.001,
+          "16000": 0.001,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 123,
+      "name": "Cavidad_medular_humero_femur_distal",
+      "name_en": "Humeri and femora, lower halves, medullary cavity",
+      "name_matlab": "ICRP-110: Humeri and femora, lower halves, medullary cavity",
+      "color": [
+        0.8061,
+        0.8627,
+        0.6667
+      ],
+      "hu_range": [
+        -100,
+        100
+      ],
+      "density_gcm3": 0.98,
+      "mcnp_material": {
+        "id": 29,
+        "composition": {
+          "1000": 0.115,
+          "6000": 0.636,
+          "7000": 0.007,
+          "8000": 0.239,
+          "11000": 0.001,
+          "16000": 0.001,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 124,
+      "name": "Cavidad_medular_antebrazo",
+      "name_en": "Lower arm bones, medullary cavity",
+      "name_matlab": "ICRP-110: Lower arm bones, medullary cavity",
+      "color": [
+        0.8073,
+        0.415,
+        0.8085
+      ],
+      "hu_range": [
+        -100,
+        100
+      ],
+      "density_gcm3": 0.98,
+      "mcnp_material": {
+        "id": 30,
+        "composition": {
+          "1000": 0.115,
+          "6000": 0.636,
+          "7000": 0.007,
+          "8000": 0.239,
+          "11000": 0.001,
+          "16000": 0.001,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 125,
+      "name": "Cavidad_medular_pierna",
+      "name_en": "Lower leg bones, medullary cavity",
+      "name_matlab": "ICRP-110: Lower leg bones, medullary cavity",
+      "color": [
+        0.5546,
+        0.8807,
+        0.7845
+      ],
+      "hu_range": [
+        -100,
+        100
+      ],
+      "density_gcm3": 0.98,
+      "mcnp_material": {
+        "id": 31,
+        "composition": {
+          "1000": 0.115,
+          "6000": 0.636,
+          "7000": 0.007,
+          "8000": 0.239,
+          "11000": 0.001,
+          "16000": 0.001,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 126,
+      "name": "Cartilago",
+      "name_en": "Cartilage",
+      "name_matlab": "ICRP-110: Cartilage",
+      "color": [
+        0.8046,
+        0.6381,
+        0.5209
+      ],
+      "hu_range": [
+        -100,
+        100
+      ],
+      "density_gcm3": 1.1,
+      "mcnp_material": {
+        "id": 32,
+        "composition": {
+          "1000": 0.096,
+          "6000": 0.099,
+          "7000": 0.022,
+          "8000": 0.744,
+          "11000": 0.005,
+          "15000": 0.022,
+          "16000": 0.009,
+          "17000": 0.003
+        }
+      }
+    },
+    {
+      "index": 127,
+      "name": "Piel",
+      "name_en": "Skin",
+      "name_matlab": "ICRP-110: Skin",
+      "color": [
+        0.5242,
+        0.486,
+        0.8002
+      ],
+      "hu_range": [
+        -100,
+        100
+      ],
+      "density_gcm3": 1.09,
+      "mcnp_material": {
+        "id": 33,
+        "composition": {
+          "1000": 0.1,
+          "6000": 0.199,
+          "7000": 0.042,
+          "8000": 0.65,
+          "11000": 0.002,
+          "15000": 0.001,
+          "16000": 0.002,
+          "17000": 0.003,
+          "19000": 0.001
+        }
+      }
+    },
+    {
+      "index": 128,
+      "name": "Sangre",
+      "name_en": "Blood",
+      "name_matlab": "ICRP-110: Blood",
+      "color": [
+        0.7777,
+        0.9227,
+        0.7479
+      ],
+      "hu_range": [
+        50,
+        150
+      ],
+      "density_gcm3": 1.06,
+      "mcnp_material": {
+        "id": 34,
+        "composition": {
+          "1000": 0.102,
+          "6000": 0.11,
+          "7000": 0.033,
+          "8000": 0.745,
+          "11000": 0.001,
+          "15000": 0.001,
+          "16000": 0.002,
+          "17000": 0.003,
+          "19000": 0.002,
+          "26000": 0.001
+        }
+      }
+    },
+    {
+      "index": 129,
+      "name": "Tejido_muscular",
+      "name_en": "Muscle tissue",
+      "name_matlab": "ICRP-110: Muscle tissue",
+      "color": [
+        0.9453,
+        0.7723,
+        0.8523
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 35,
+        "composition": {
+          "1000": 0.102,
+          "6000": 0.142,
+          "7000": 0.034,
+          "8000": 0.711,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.001,
+          "19000": 0.004
+        }
+      }
+    },
+    {
+      "index": 130,
+      "name": "Higado_ICRP",
+      "name_en": "Liver",
+      "name_matlab": "ICRP-110: Liver",
+      "color": [
+        0.8517,
+        0.9157,
+        0.9366
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 36,
+        "composition": {
+          "1000": 0.102,
+          "6000": 0.13,
+          "7000": 0.031,
+          "8000": 0.725,
+          "11000": 0.002,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.003
+        }
+      }
+    },
+    {
+      "index": 131,
+      "name": "Pancreas",
+      "name_en": "Pancreas",
+      "name_matlab": "ICRP-110: Pancreas",
+      "color": [
+        0.8667,
+        0.8588,
+        0.6941
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 37,
+        "composition": {
+          "1000": 0.105,
+          "6000": 0.155,
+          "7000": 0.025,
+          "8000": 0.706,
+          "11000": 0.002,
+          "15000": 0.002,
+          "16000": 0.001,
+          "17000": 0.002,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 132,
+      "name": "Cerebro",
+      "name_en": "Brain",
+      "name_matlab": "ICRP-110: Brain",
+      "color": [
+        0.8924,
+        0.7876,
+        0.9458
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 38,
+        "composition": {
+          "1000": 0.107,
+          "6000": 0.143,
+          "7000": 0.023,
+          "8000": 0.713,
+          "11000": 0.002,
+          "15000": 0.004,
+          "16000": 0.002,
+          "17000": 0.003,
+          "19000": 0.003
+        }
+      }
+    },
+    {
+      "index": 133,
+      "name": "Corazon",
+      "name_en": "Heart",
+      "name_matlab": "ICRP-110: Heart",
+      "color": [
+        0.8549,
+        0.9647,
+        0.8956
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 39,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.138,
+          "7000": 0.029,
+          "8000": 0.719,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.003
+        }
+      }
+    },
+    {
+      "index": 134,
+      "name": "Ojos",
+      "name_en": "Eyes",
+      "name_matlab": "ICRP-110: Eyes",
+      "color": [
+        0.9342,
+        0.8171,
+        0.807
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 40,
+        "composition": {
+          "1000": 0.097,
+          "6000": 0.181,
+          "7000": 0.053,
+          "8000": 0.663,
+          "11000": 0.001,
+          "15000": 0.001,
+          "16000": 0.003,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 135,
+      "name": "Rinones",
+      "name_en": "Kidneys",
+      "name_matlab": "ICRP-110: Kidneys",
+      "color": [
+        0.9679,
+        0.9715,
+        0.9851
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 41,
+        "composition": {
+          "1000": 0.103,
+          "6000": 0.124,
+          "7000": 0.031,
+          "8000": 0.731,
+          "11000": 0.002,
+          "15000": 0.002,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.002,
+          "20000": 0.001
+        }
+      }
+    },
+    {
+      "index": 136,
+      "name": "Estomago",
+      "name_en": "Stomach",
+      "name_matlab": "ICRP-110: Stomach",
+      "color": [
+        0.7541,
+        0.8724,
+        0.6335
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 42,
+        "composition": {
+          "1000": 0.105,
+          "6000": 0.114,
+          "7000": 0.025,
+          "8000": 0.75,
+          "11000": 0.001,
+          "15000": 0.001,
+          "16000": 0.001,
+          "17000": 0.002,
+          "19000": 0.001
+        }
+      }
+    },
+    {
+      "index": 137,
+      "name": "Intestino_delgado",
+      "name_en": "Small intestine",
+      "name_matlab": "ICRP-110: Small intestine",
+      "color": [
+        0.9329,
+        0.8475,
+        0.9155
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 43,
+        "composition": {
+          "1000": 0.105,
+          "6000": 0.113,
+          "7000": 0.026,
+          "8000": 0.75,
+          "11000": 0.001,
+          "15000": 0.001,
+          "16000": 0.001,
+          "17000": 0.002,
+          "19000": 0.001
+        }
+      }
+    },
+    {
+      "index": 138,
+      "name": "Intestino_grueso",
+      "name_en": "Large intestine",
+      "name_matlab": "ICRP-110: Large intestine",
+      "color": [
+        0.7348,
+        0.9123,
+        0.8966
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 44,
+        "composition": {
+          "1000": 0.105,
+          "6000": 0.113,
+          "7000": 0.026,
+          "8000": 0.75,
+          "11000": 0.001,
+          "15000": 0.001,
+          "16000": 0.001,
+          "17000": 0.002,
+          "19000": 0.001
+        }
+      }
+    },
+    {
+      "index": 139,
+      "name": "Bazo",
+      "name_en": "Spleen",
+      "name_matlab": "ICRP-110: Spleen",
+      "color": [
+        0.803,
+        0.6755,
+        0.4676
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 45,
+        "composition": {
+          "1000": 0.102,
+          "6000": 0.111,
+          "7000": 0.033,
+          "8000": 0.743,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.002,
+          "17000": 0.003,
+          "19000": 0.002,
+          "26000": 0.001
+        }
+      }
+    },
+    {
+      "index": 140,
+      "name": "Tiroides",
+      "name_en": "Thyroid",
+      "name_matlab": "ICRP-110: Thyroid",
+      "color": [
+        0.5685,
+        0.4259,
+        0.8604
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 46,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.117,
+          "7000": 0.026,
+          "8000": 0.745,
+          "11000": 0.002,
+          "15000": 0.001,
+          "16000": 0.001,
+          "17000": 0.002,
+          "19000": 0.001,
+          "53000": 0.001
+        }
+      }
+    },
+    {
+      "index": 141,
+      "name": "Veijga_urinaria",
+      "name_en": "Urinary bladder",
+      "name_matlab": "ICRP-110: Urinary bladder",
+      "color": [
+        0.5001,
+        0.8019,
+        0.5111
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 47,
+        "composition": {
+          "1000": 0.105,
+          "6000": 0.096,
+          "7000": 0.026,
+          "8000": 0.761,
+          "11000": 0.002,
+          "15000": 0.002,
+          "16000": 0.002,
+          "17000": 0.003,
+          "19000": 0.003
+        }
+      }
+    },
+    {
+      "index": 142,
+      "name": "Testiculos",
+      "name_en": "Testes",
+      "name_matlab": "ICRP-110: Testes",
+      "color": [
+        0.8842,
+        0.4649,
+        0.572
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 48,
+        "composition": {
+          "1000": 0.106,
+          "6000": 0.1,
+          "7000": 0.021,
+          "8000": 0.764,
+          "11000": 0.002,
+          "15000": 0.001,
+          "16000": 0.002,
+          "17000": 0.002,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 143,
+      "name": "Suprarrenales",
+      "name_en": "Adrenals",
+      "name_matlab": "ICRP-110: Adrenals",
+      "color": [
+        0.5055,
+        0.7119,
+        0.8827
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.03,
+      "mcnp_material": {
+        "id": 49,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.221,
+          "7000": 0.028,
+          "8000": 0.637,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 144,
+      "name": "Esofago",
+      "name_en": "Oesophagus",
+      "name_matlab": "ICRP-110: Oesophagus",
+      "color": [
+        0.9909,
+        0.994,
+        0.9746
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.03,
+      "mcnp_material": {
+        "id": 50,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.213,
+          "7000": 0.029,
+          "8000": 0.644,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 145,
+      "name": "Tejido_mixto",
+      "name_en": "Gallbladder, Pituitary gland, Trachea, Thymus, Tonsils, Ureters, ...",
+      "name_matlab": "ICRP-110: Gallbladder, Pituitary gland, Trachea, Thymus, Tonsils, Ureters, ...",
+      "color": [
+        0.8192,
+        0.5616,
+        0.858
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.03,
+      "mcnp_material": {
+        "id": 51,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.231,
+          "7000": 0.028,
+          "8000": 0.627,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 146,
+      "name": "Prostata",
+      "name_en": "Prostate",
+      "name_matlab": "ICRP-110: Prostate",
+      "color": [
+        0.7692,
+        0.9171,
+        0.8546
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.03,
+      "mcnp_material": {
+        "id": 52,
+        "composition": {
+          "1000": 0.104,
+          "6000": 0.231,
+          "7000": 0.028,
+          "8000": 0.627,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 147,
+      "name": "Linfa",
+      "name_en": "Lymph",
+      "name_matlab": "ICRP-110: Lymph",
+      "color": [
+        0.8675,
+        0.7038,
+        0.6384
+      ],
+      "hu_range": [
+        0,
+        100
+      ],
+      "density_gcm3": 1.03,
+      "mcnp_material": {
+        "id": 53,
+        "composition": {
+          "1000": 0.108,
+          "6000": 0.042,
+          "7000": 0.011,
+          "8000": 0.831,
+          "11000": 0.003,
+          "16000": 0.001,
+          "17000": 0.004
+        }
+      }
+    },
+    {
+      "index": 148,
+      "name": "Mama_tejido_glandular",
+      "name_en": "Breast (mammary gland)",
+      "name_matlab": "ICRP-110: Breast (mammary gland)",
+      "color": [
+        0.7836,
+        0.7845,
+        0.9262
+      ],
+      "hu_range": [
+        -50,
+        150
+      ],
+      "density_gcm3": 1.02,
+      "mcnp_material": {
+        "id": 54,
+        "composition": {
+          "1000": 0.112,
+          "6000": 0.516,
+          "7000": 0.011,
+          "8000": 0.358,
+          "11000": 0.001,
+          "16000": 0.001,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 149,
+      "name": "Tejido_adiposo",
+      "name_en": "Adipose tissue",
+      "name_matlab": "ICRP-110: Adipose tissue",
+      "color": [
+        0.6153,
+        0.8483,
+        0.5164
+      ],
+      "hu_range": [
+        -200,
+        -50
+      ],
+      "density_gcm3": 0.95,
+      "mcnp_material": {
+        "id": 55,
+        "composition": {
+          "1000": 0.114,
+          "6000": 0.588,
+          "7000": 0.008,
+          "8000": 0.287,
+          "11000": 0.001,
+          "16000": 0.001,
+          "17000": 0.001
+        }
+      }
+    },
+    {
+      "index": 150,
+      "name": "Tejido_pulmonar",
+      "name_en": "Lung tissue (compressed lungs)",
+      "name_matlab": "ICRP-110: Lung tissue (compressed lungs)",
+      "color": [
+        0.9772,
+        0.9522,
+        0.9669
+      ],
+      "hu_range": [
+        -900,
+        -500
+      ],
+      "density_gcm3": 0.382,
+      "mcnp_material": {
+        "id": 56,
+        "composition": {
+          "1000": 0.103,
+          "6000": 0.107,
+          "7000": 0.032,
+          "8000": 0.746,
+          "11000": 0.002,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.003,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 151,
+      "name": "Contenido_digestivo",
+      "name_en": "Gastro-intestinal tract - contents",
+      "name_matlab": "ICRP-110: Gastro-intestinal tract - contents",
+      "color": [
+        0.7932,
+        0.9158,
+        0.9323
+      ],
+      "hu_range": [
+        -200,
+        200
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 57,
+        "composition": {
+          "1000": 0.1,
+          "6000": 0.222,
+          "7000": 0.022,
+          "8000": 0.644,
+          "11000": 0.001,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.001,
+          "19000": 0.004,
+          "20000": 0.001
+        }
+      }
+    },
+    {
+      "index": 152,
+      "name": "Orina",
+      "name_en": "Urine",
+      "name_matlab": "ICRP-110: Urine",
+      "color": [
+        0.8839,
+        0.8412,
+        0.6377
+      ],
+      "hu_range": [
+        0,
+        100
+      ],
+      "density_gcm3": 1.04,
+      "mcnp_material": {
+        "id": 58,
+        "composition": {
+          "1000": 0.107,
+          "6000": 0.003,
+          "7000": 0.01,
+          "8000": 0.873,
+          "11000": 0.004,
+          "15000": 0.001,
+          "19000": 0.002
+        }
+      }
+    },
+    {
+      "index": 153,
+      "name": "Aire_ICRP",
+      "name_en": "Air",
+      "name_matlab": "ICRP-110: Air",
+      "color": [
+        0.7634,
+        0.6025,
+        0.9034
+      ],
+      "hu_range": [
+        -1024,
+        -900
+      ],
+      "density_gcm3": 0.001,
+      "mcnp_material": {
+        "id": 59,
+        "composition": {
+          "7000": 0.8,
+          "8000": 0.2
         }
       }
     }
   ],
   "ts_label_to_phantom": {
     "1": 90,
-    "11": 50, "12": 50, "13": 50, "14": 50, "15": 50,
-    "36": 80, "37": 80,
-    "46": 80, "47": 80, "48": 80, "49": 80, "50": 80,
-    "63": 80, "64": 80, "65": 80, "66": 80, "67": 80, "68": 80, "69": 80,
-    "70": 80, "71": 80, "72": 80, "73": 80, "74": 80, "75": 80, "76": 80,
-    "77": 80, "78": 80, "79": 80, "80": 80, "81": 80,
-    "82": 80, "83": 80, "84": 80, "85": 80, "86": 80,
-    "87": 80, "88": 80, "89": 80, "90": 80, "91": 80, "92": 80, "93": 80,
-    "94": 80, "95": 80, "96": 80, "97": 80, "98": 80,
-    "99": 80, "100": 80, "101": 80, "102": 80, "103": 80, "104": 80,
-    "105": 80, "106": 80, "107": 80, "108": 80, "109": 80, "110": 80,
-    "111": 80, "112": 80, "113": 80, "114": 80
+    "11": 50,
+    "12": 50,
+    "13": 50,
+    "14": 50,
+    "15": 50,
+    "36": 80,
+    "37": 80,
+    "46": 80,
+    "47": 80,
+    "48": 80,
+    "49": 80,
+    "50": 80,
+    "63": 80,
+    "64": 80,
+    "65": 80,
+    "66": 80,
+    "67": 80,
+    "68": 80,
+    "69": 80,
+    "70": 80,
+    "71": 80,
+    "72": 80,
+    "73": 80,
+    "74": 80,
+    "75": 80,
+    "76": 80,
+    "77": 80,
+    "78": 80,
+    "79": 80,
+    "80": 80,
+    "81": 80,
+    "82": 80,
+    "83": 80,
+    "84": 80,
+    "85": 80,
+    "86": 80,
+    "87": 80,
+    "88": 80,
+    "89": 80,
+    "90": 80,
+    "91": 80,
+    "92": 80,
+    "93": 80,
+    "94": 80,
+    "95": 80,
+    "96": 80,
+    "97": 80,
+    "98": 80,
+    "99": 80,
+    "100": 80,
+    "101": 80,
+    "102": 80,
+    "103": 80,
+    "104": 80,
+    "105": 80,
+    "106": 80,
+    "107": 80,
+    "108": 80,
+    "109": 80,
+    "110": 80,
+    "111": 80,
+    "112": 80,
+    "113": 80,
+    "114": 80
   },
   "ts_body_labels": [
-    2, 3, 4, 5, 6, 7, 8, 9, 10,
-    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-    32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
   ]
 }
