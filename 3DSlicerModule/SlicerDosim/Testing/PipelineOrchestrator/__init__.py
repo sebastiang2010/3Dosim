@@ -16,8 +16,10 @@ Estructura modular que luego se promocionara a SlicerDosimLib/orchestrator/:
    comandos.py            - Consola interactiva de comandos (lenguaje natural)
    main.py                - Entry point con argparse
    views.py               - setup_medical_views() + load_pipeline_config()
-   pipeline_config.jsonc  - Configuracion central (scene_output_dir, vistas, etc.)
-   ai_supervisor.py       - Revision IA paso a paso (DeepSeek/OpenRouter)
+    pipeline_config.jsonc           - Configuracion central (scene_output_dir, vistas, etc.)
+    ai_supervisor.py                - Revision IA paso a paso (DeepSeek/OpenRouter)
+    pipeline_mcnp_from_scene.py     - MCNPFromScenePipeline: carga .mrb y genera MCNP
+    main_mcnp_from_scene.py         - Entry point CLI para pipeline MCNP desde escena
     deepseek_client.py     - Cliente OpenRouter multi-modelo
     monailabel_server.py   - Wrapper para iniciar servidor MONAI Label
 

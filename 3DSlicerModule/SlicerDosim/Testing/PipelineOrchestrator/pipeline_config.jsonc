@@ -11,7 +11,7 @@
     "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
 
     // Directorio de output por defecto (relativo a data_dir/../resultados_test)
-    "output_dir_rel": "../resultados_test",
+    "output_dir_rel": "C:/MAT/3Dosim/ai-pipe/mcnp_input",
 
     // Configuracion de visualizacion medica
     "views": {

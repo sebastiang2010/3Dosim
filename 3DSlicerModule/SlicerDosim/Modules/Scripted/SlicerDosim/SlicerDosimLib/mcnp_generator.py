@@ -238,9 +238,18 @@ class MCNPInputGenerator:
         # 1. Extraer info del volumen
         dims, origin, spacing = self._get_volume_info(ct_volume_node)
         nx, ny, nz = dims
+
+        # --- Almacenar dimensiones exactas en cm como atributos compartidos ---
+        # para que _write_surfaces y _write_tallies usen EXACTAMENTE el mismo float
+        sx, sy, sz = spacing
+        sx_cm, sy_cm, sz_cm = sx / 10.0, sy / 10.0, sz / 10.0
+        self._xm = nx * sx_cm
+        self._ym = ny * sy_cm
+        self._zm = nz * sz_cm
+
         logger.info(f"  Dimensiones (voxeles): {dims}")
         logger.info(f"  Espaciado (mm): {spacing}")
-        logger.info(f"  Dimensiones (cm): {nx*spacing[0]/10:.2f} x {ny*spacing[1]/10:.2f} x {nz*spacing[2]/10:.2f}")
+        logger.info(f"  Dimensiones (cm): {self._xm:.2f} x {self._ym:.2f} x {self._zm:.2f}")
 
         # 2. Extraer labelmap
         self._ct_ref_node = ct_volume_node
@@ -600,22 +609,34 @@ class MCNPInputGenerator:
         f.write(line.rstrip() + "\n")
 
     def _write_surfaces(self, f, dims, spacing):
-        """Escribe superficies: RPP bounding box + RPP voxel + SO 650 sphere."""
+        """
+        Escribe superficies: RPP bounding box + RPP voxel + SO 650 sphere.
+        
+        IMPORTANTE: Las dimensiones del RPP 1 deben coincidir EXACTAMENTE
+        con las del mesh tally. Se usa precision de 6 decimales.
+        """
         nx, ny, nz = dims
         sx, sy, sz = spacing  # mm
-        sx_cm = round(sx / 10.0, 4)
-        sy_cm = round(sy / 10.0, 4)
-        sz_cm = round(sz / 10.0, 4)
-        xm = round(nx * sx_cm, 4)
-        ym = round(ny * sy_cm, 4)
-        zm = round(nz * sz_cm, 4)
+        
+        # sx_cm: usado SOLO para RPP 2 (voxel unitario) y comentario
+        sx_cm = sx / 10.0
+        sy_cm = sy / 10.0
+        sz_cm = sz / 10.0
+        
+        # xm, ym, zm: leidos de atributos compartidos (self._xm, _ym, _zm)
+        # calculados UNA VEZ en generate() para garantizar coincidencia
+        # EXACTA con _write_tallies (mismo objeto flotante, evita diferencias
+        # de precision entre recalculos independientes)
+        xm = self._xm
+        ym = self._ym
+        zm = self._zm
 
         f.write("c Superficies \n")
-        f.write(f"c Tamano del voxel:  dx= {sx_cm} dy= {sy_cm} dz= {sz_cm} \n")
+        f.write(f"c Tamano del voxel:  dx= {sx_cm:.6f} dy= {sy_cm:.6f} dz= {sz_cm:.6f} \n")
         f.write(f"c Tamano de la imagen:  [ {nx} {ny} {nz} ] \n")
         f.write("c\n")
-        f.write(f"1   rpp  0.  {xm} 0.  {ym} 0.  {zm} \n")
-        f.write(f"2   rpp  0.  {sx_cm} 0. {sy_cm} 0. {sz_cm} \n")
+        f.write(f"1   rpp  0.  {xm:.6f} 0.  {ym:.6f} 0.  {zm:.6f} \n")
+        f.write(f"2   rpp  0.  {sx_cm:.6f} 0. {sy_cm:.6f} 0. {sz_cm:.6f} \n")
         f.write("650 so 15 \n")
         f.write("\n")
 
@@ -727,12 +748,24 @@ class MCNPInputGenerator:
         f.write(f"c Se generaron N fuentes: {n_active}\n")
 
     def _write_tallies(self, f, dims, spacing, iso_data):
-        """Escribe talles TMESH."""
+        """
+        Escribe talles TMESH.
+        
+        IMPORTANTE: Las dimensiones del mesh tally deben coincidir EXACTAMENTE
+        con las del RPP 1 (bounding box). Se usan las dimensiones reales calculadas
+        a partir de spacing * dims, con precision de 6 decimales.
+        
+        NOTA: Para garantizar coincidencia exacta con RPP, se usa el mismo calculo
+        que en _write_surfaces: sx_cm = sx / 10.0, luego xm = nx * sx_cm.
+        """
         nx, ny, nz = dims
-        sx, sy, sz = spacing  # mm
-        xm = round(nx * sx / 10.0, 4)
-        ym = round(ny * sy / 10.0, 4)
-        zm = round(nz * sz / 10.0, 4)
+        
+        # xm, ym, zm: leidos de atributos compartidos (self._xm, _ym, _zm)
+        # calculados UNA VEZ en generate() para garantizar coincidencia
+        # EXACTA con _write_surfaces (mismo valor flotante, misma referencia)
+        xm = self._xm
+        ym = self._ym
+        zm = self._zm
 
         f.write("c\n")
         f.write("c TALLY \n")
@@ -743,9 +776,13 @@ class MCNPInputGenerator:
         f.write("tmesh \n")
         f.write("c \n")
         f.write("rmesh1:e   pedep \n")
-        f.write(f"cora1  0  {nx-1}i   {xm} \n")
-        f.write(f"corb1  0  {ny-1}i   {ym} \n")
-        f.write(f"corc1  0  {nz-1}i   {zm} \n")
+        # Formato: cora1  0  <n_intervals>i  <max_coord>
+        # Donde <n_intervals> = nx-1 (numero de intervalos entre voxeles)
+        # y <max_coord> = dimension exacta en cm (DEBE coincidir con RPP 1)
+        # Usar formato .6f para preservar precision (ej: 50.022400)
+        f.write(f"cora1  0  {nx-1}i   {xm:.6f} \n")
+        f.write(f"corb1  0  {ny-1}i   {ym:.6f} \n")
+        f.write(f"corc1  0  {nz-1}i   {zm:.6f} \n")
         f.write("c\n")
         f.write("endmd \n")
 
