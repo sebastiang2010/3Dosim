@@ -1063,7 +1063,15 @@ def main():
             slicer.util.setSliceViewerLayers(foreground=dose_node, foregroundOpacity=0.4)
         # Layout: arriba plots, abajo slices
         slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
-        slicer.app.exec()
+        # NO usar slicer.app.exec() — el event loop ya esta corriendo
+        # y exec() falla, permitiendo que el script termine y Slicer se cierre.
+        # En vez: loop con processEvents() mantiene el script vivo.
+        try:
+            while True:
+                slicer.app.processEvents()
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
 
     return 0
 
