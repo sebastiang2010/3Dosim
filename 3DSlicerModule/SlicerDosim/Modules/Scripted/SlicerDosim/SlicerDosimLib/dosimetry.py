@@ -2,18 +2,28 @@
 Modulo de calculo dosimetrico para SlicerDosim.
 
 Procesa el output MCNP (archivos MCTAL) y genera mapas de dosis 3D.
-Incluye tanto metodo Monte Carlo como metodo analitico MIRD.
+Incluye metodo Monte Carlo (FMESH4 → Gy) y metodo analitico MIRD.
 
-Delega el parseo MCTAL a mctal_parser.py.
+Conversion a Gy — MATLAB cargo_mctal.m (lineas 389-395):
+  1. D_MeV_cm3 / rho(g/cm³) → D_MeV/g   (f_div_densidad)
+  2. D_MeV/g * 1.6e-13      → D_J/g      (MeV2J)
+  3. D_J/g * t * Actividad   → D_J/g totales
+  4. * 1000                  → D_J/kg = Gy
 """
 
 from __future__ import annotations
 
 import logging
+import numpy as np
 import os
 from typing import Optional
 
-from .mctal_parser import MCTALParser
+try:
+    from .mctal_parser import MCTALParser, Y90_MEAN_LIFE_S
+except ImportError:
+    from mctal_parser import MCTALParser, Y90_MEAN_LIFE_S
+
+logger = logging.getLogger(__name__)
 
 
 class DoseCalculator:
@@ -21,128 +31,179 @@ class DoseCalculator:
     Calculador de dosis a partir de simulaciones MCNP.
 
     Lee archivos MCTAL via MCTALParser, extrae dosis por voxel,
-    y genera volumenes de dosis 3D en el escenario de 3D Slicer.
+    convierte a Gy con formula MATLAB-correcta, y genera volumenes
+    de dosis 3D en el escenario de 3D Slicer.
     """
 
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.parser = MCTALParser()
 
-    def load_mctal(self, mctal_path: str) -> dict:
+    def load_mctal(
+        self,
+        mctal_path: str,
+        nx: Optional[int] = None,
+        ny: Optional[int] = None,
+        nz: Optional[int] = None,
+    ) -> dict:
         """
         Carga un archivo MCTAL de salida MCNP.
 
         Args:
             mctal_path: ruta al archivo MCTAL
+            nx, ny, nz: dimensiones de la mesh (auto-detecta si None)
 
         Returns:
-            dict con datos de dosis estructurados:
-
-            Claves principales:
-              - 'dose_3d': array 3D de dosis (MeV/g/particula)
+            dict con:
+              - 'dose_3d': array 3D (nx, ny, nz) en MeV/cm³/particula
               - 'uncertainty': array 3D de incertidumbre
               - 'dimensions': (nx, ny, nz)
-              - 'tally_data': dict con datos de cada tally
-              - 'title': titulo del problema
               - 'nps': numero de historias
+              - 'title': titulo
         """
         if not os.path.exists(mctal_path):
             raise FileNotFoundError(f"Archivo MCTAL no encontrado: {mctal_path}")
 
         self.logger.info(f"Cargando MCTAL: {mctal_path}")
-
-        dose_data = self.parser.parse(mctal_path)
+        dose_data = self.parser.parse(mctal_path, nx=nx, ny=ny, nz=nz)
         return dose_data
 
-    def compute_dose_3d(
-        self, mctal_data: dict, volume_node, activity_gbq: float = 1.0
-    ) -> Optional[object]:
+    def compute_dose_gy(
+        self,
+        mctal_data: dict,
+        labelmap_node,
+        cell_densities: dict[int, float],
+        activity_bq: float,
+        t_meanlife_s: float = Y90_MEAN_LIFE_S,
+        error_eliminar: float = 1.5,
+    ) -> Optional[np.ndarray]:
         """
-        Convierte dosis del MCTAL a mapa de dosis 3D en Gy.
+        Convierte dosis MCTAL (MeV/cm³/particula) a Gy.
 
-        La conversion es:
-            D_Gy = D_MCTAL * Actividad_GBq * k
-
-        donde k = 49.98 J-s (constante de conversion).
+        Usa MCTALParser.compute_dose_gy() para la conversion exacta.
 
         Args:
             mctal_data: datos parseados del MCTAL
-            volume_node: volumen de referencia para metadatos
-            activity_gbq: actividad administrada en GBq
+            labelmap_node: nodo de labelmap en Slicer (para densidades)
+            cell_densities: dict {indice_tejido: densidad_g_cm3}
+            activity_bq: actividad total en Bq
+            t_meanlife_s: tiempo de integracion (mean lifetime)
+            error_eliminar: umbral de error relativo
 
         Returns:
-            nodo de volumen escalar con la dosis 3D en Gy
+            array 3D de dosis en Gy, o None
         """
-        try:
-            import slicer
-            import numpy as np
+        import slicer
 
-            # Obtener array de dosis
-            dose_raw = mctal_data.get("dose_3d")
-            if dose_raw is None:
-                raise ValueError("No hay datos de dosis en MCTAL")
+        dose_raw = mctal_data.get("dose_3d")
+        if dose_raw is None:
+            raise ValueError("No hay datos de dosis en MCTAL")
 
-            # Convertir a Gy
-            k = 49.98  # J-s, conversion MCNP -> Gy
-            dose_gy = np.array(dose_raw) * activity_gbq * k
+        # Extraer labelmap array de Slicer
+        labelmap_array = slicer.util.arrayFromVolume(labelmap_node)
+        # Slicer da array en (nz, ny, nx) — transponer a (nx, ny, nz)
+        labelmap_array = labelmap_array.transpose(2, 1, 0)
 
-            # Crear volumen en Slicer
-            dose_node = slicer.mrmlScene.AddNewNodeByClass(
-                "vtkMRMLScalarVolumeNode", "Dosis_3D_Gy"
-            )
+        dims = mctal_data.get("dimensions")
+        if dims and dims != (0, 0, 0):
+            if labelmap_array.shape[:3] != dims:
+                self.logger.warning(
+                    f"Labelmap shape {labelmap_array.shape} != MCTAL dims {dims}"
+                )
+                # Redimensionar labelmap si es necesario
+                from scipy.ndimage import zoom
+                if hasattr(labelmap_array, 'shape'):
+                    zx = dims[0] / labelmap_array.shape[0]
+                    zy = dims[1] / labelmap_array.shape[1]
+                    zz = dims[2] / labelmap_array.shape[2]
+                    labelmap_array = zoom(labelmap_array, (zx, zy, zz), order=0)
 
-            import vtk
-            vtk_array = vtk.vtkDoubleArray()
-            vtk_array.SetNumberOfValues(dose_gy.size)
-            for i, val in enumerate(dose_gy.flat):
-                vtk_array.SetValue(i, float(val))
+        # Convertir a Gy usando el metodo estatico
+        dose_gy = MCTALParser.compute_dose_gy(
+            dose_raw,
+            labelmap_array,
+            cell_densities,
+            activity_bq,
+            t_meanlife_s,
+            error_eliminar,
+        )
 
-            # Configurar imagen VTK
-            vtk_image = vtk.vtkImageData()
-            dims = mctal_data.get("dimensions", dose_gy.shape)
-            vtk_image.SetDimensions(dims)
-            vtk_image.GetPointData().SetScalars(vtk_array)
+        return dose_gy
 
-            # Copiar espaciado y origen del volumen de referencia
-            if volume_node:
-                vtk_image.SetSpacing(volume_node.GetSpacing())
-                vtk_image.SetOrigin(volume_node.GetOrigin())
+    def create_dose_volume(
+        self, dose_gy: np.ndarray, reference_node
+    ) -> Optional[object]:
+        """
+        Crea un nodo de volumen escalar en Slicer con la dosis en Gy.
 
-            dose_node.SetAndObserveImageData(vtk_image)
-            self.logger.info(f"Dosis 3D creada: {dose_gy.sum():.2f} Gy total")
+        Usa slicer.util.updateVolumeFromArray() que es el metodo
+        recomendado por 3D Slicer y soporta arrays grandes.
 
-            return dose_node
+        Args:
+            dose_gy: array 3D (nx, ny, nz) en Gy
+            reference_node: nodo de referencia para metadatos (CT/labelmap)
 
-        except Exception as e:
-            self.logger.error(f"Error calculando dosis 3D: {e}")
-            return None
+        Returns:
+            vtkMRMLScalarVolumeNode
+        """
+        import slicer
+        import vtk
+
+        # Slicer espera array en (nz, ny, nx)
+        dose_slicer = np.ascontiguousarray(dose_gy.astype(np.float32).transpose(2, 1, 0))
+
+        dose_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLScalarVolumeNode", "Dosis_3D_Gy"
+        )
+
+        slicer.util.updateVolumeFromArray(dose_node, dose_slicer)
+
+        if reference_node:
+            dose_node.SetSpacing(reference_node.GetSpacing())
+            dose_node.SetOrigin(reference_node.GetOrigin())
+            ref_ijk = vtk.vtkMatrix4x4()
+            reference_node.GetIJKToRASMatrix(ref_ijk)
+            dose_node.SetIJKToRASMatrix(ref_ijk)
+
+        self.logger.info(f"Nodo de dosis creado: Dosis_3D_Gy")
+        return dose_node
 
     def compute_mird(
         self,
         liver_volume_ml: float,
         tumor_volume_ml: float,
-        shunt_fraction: float = 0.05,
-        target_dose_gy: float = 150.0,
-        t_n_ratio: float = 2.8,
+        shunt_fraction: float = 0.0,
+        t_n_ratio: Optional[float] = None,
+        activity_gbq: Optional[float] = None,
+        target_dose_gy: Optional[float] = None,
     ) -> dict:
         """
-        Calculo analitico MIRD para planificacion Y-90.
+        Calculo MIRD partition model — MATLAB cargo_mctal.m lineas 211-227.
 
-        Implementa el modelo del MIRD pam 103 (Libro Y-90).
+        Si se da activity_gbq, calcula dosis a higado y tumor.
+        Si se da target_dose_gy, calcula actividad requerida.
 
         Args:
-            liver_volume_ml: volumen de higado sano (ml)
+            liver_volume_ml: volumen de higado (ml)
             tumor_volume_ml: volumen tumoral (ml)
-            shunt_fraction: fraccion de shunt pulmonar (SF)
-            target_dose_gy: dosis target al tumor (Gy)
-            t_n_ratio: relacion tumor/normal (T/N)
+            shunt_fraction: fraccion de shunt pulmonar (SF, 0-1)
+            t_n_ratio: relacion T/N (si no se da, se calcula de PET)
+            activity_gbq: actividad administrada en GBq
+            target_dose_gy: dosis target al tumor en Gy
 
         Returns:
-            dict con actividad requerida (GBq) y dosis a higado normal (Gy)
+            dict con resultados MIRD
         """
-        k = 49.98  # J-s (Gy * kg / GBq)
+        k = 48.98  # J-s (MATLAB cargo_mctal.m linea 220)
+        densidad_liver = 1.06  # g/cm³
 
-        # Fracciones de uptake
+        m_liver = liver_volume_ml * densidad_liver / 1000  # kg
+        m_tumor = tumor_volume_ml * densidad_liver / 1000  # kg
+
+        if t_n_ratio is None or t_n_ratio <= 0:
+            t_n_ratio = 2.8  # default si no se puede calcular
+
+        # Fracciones de uptake (MATLAB lineas 222-223)
         fu_normal = (1 - shunt_fraction) * (
             liver_volume_ml / (t_n_ratio * tumor_volume_ml + liver_volume_ml)
         )
@@ -150,28 +211,34 @@ class DoseCalculator:
             t_n_ratio * tumor_volume_ml / (t_n_ratio * tumor_volume_ml + liver_volume_ml)
         )
 
-        # Masa (asumiendo densidad 1.0 g/ml)
-        m_tumor = tumor_volume_ml / 1000  # kg
-        m_normal = liver_volume_ml / 1000  # kg
-
-        # Actividad necesaria
-        actividad_gbq = target_dose_gy * m_tumor / (k * fu_tumor)
-        d_normal_gy = actividad_gbq * k * fu_normal / m_normal
-
-        return {
-            "activity_gbq": actividad_gbq,
-            "liver_dose_gy": d_normal_gy,
-            "tumor_dose_gy": target_dose_gy,
-            "fu_tumor": fu_tumor,
+        result = {
+            "k_mird": k,
+            "t_n_ratio": t_n_ratio,
+            "shunt_fraction": shunt_fraction,
+            "liver_volume_ml": liver_volume_ml,
+            "tumor_volume_ml": tumor_volume_ml,
+            "m_liver_kg": m_liver,
+            "m_tumor_kg": m_tumor,
             "fu_normal": fu_normal,
+            "fu_tumor": fu_tumor,
         }
 
-    def compute_dose_kernel(
-        self, pet_volume_node, kernel_3d: dict
-    ) -> Optional[object]:
-        """
-        Convoluciona el volumen PET con un kernel de dosis
-        precalculado (aproximacion rapida sin MCNP).
-        """
-        # Placeholder: implementacion de convolution 3D
-        return None
+        if activity_gbq is not None:
+            # Calcular dosis desde actividad (MATLAB lineas 226-227)
+            d_liver = activity_gbq * k * fu_normal / m_liver if m_liver > 0 else 0
+            d_tumor = activity_gbq * k * fu_tumor / m_tumor if m_tumor > 0 else 0
+            result["activity_gbq"] = activity_gbq
+            result["liver_dose_gy"] = d_liver
+            result["tumor_dose_gy"] = d_tumor
+
+        if target_dose_gy is not None and m_tumor > 0 and fu_tumor > 0:
+            # Calcular actividad desde dosis target
+            act = target_dose_gy * m_tumor / (k * fu_tumor)
+            result["target_dose_gy"] = target_dose_gy
+            result["required_activity_gbq"] = act
+            if activity_gbq is None:
+                d_liver = act * k * fu_normal / m_liver if m_liver > 0 else 0
+                result["liver_dose_gy"] = d_liver
+                result["tumor_dose_gy"] = target_dose_gy
+
+        return result

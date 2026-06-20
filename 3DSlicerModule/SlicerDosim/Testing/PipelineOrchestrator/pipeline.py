@@ -1841,8 +1841,11 @@ class PipelineTestOrchestrator:
         if os.path.exists(src_source):
             import shutil
             dst_source = os.path.join(self.mcnp_output_dir, "Y90cel3D.src")
-            shutil.copy2(src_source, dst_source)
-            logger.info(f"  Archivo fuente copiado: {dst_source}")
+            if os.path.abspath(src_source) != os.path.abspath(dst_source):
+                shutil.copy2(src_source, dst_source)
+                logger.info(f"  Archivo fuente copiado: {dst_source}")
+            else:
+                logger.info(f"  Archivo fuente ya en destino: {dst_source}")
         else:
             logger.warning(f"  Archivo fuente no encontrado: {src_source}")
             logger.warning("  El archivo .i referencia 'read file Y90cel3D.src' pero falta el archivo")

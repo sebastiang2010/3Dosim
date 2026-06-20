@@ -75,7 +75,11 @@ class TissueConfig:
             else:
                 self._ts_mapping[int(k)] = v
 
-        self._body_labels: set[int] = set(self._raw.get("ts_body_labels", []))
+        raw_body = self._raw.get("ts_body_labels", [])
+        self._body_labels: set[int] = set(
+            item["index"] if isinstance(item, dict) else item
+            for item in raw_body
+        )
 
         self._loaded = True
         logger.info(f"TissueConfig cargado: {len(self._by_index)} tejidos")
