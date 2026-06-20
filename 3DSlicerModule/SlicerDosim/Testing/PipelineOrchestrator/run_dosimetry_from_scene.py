@@ -622,8 +622,16 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
             x_vtk.SetValue(i, float(d_vals[i]))
             y_vtk.SetValue(i, float(a_vals[i]))
 
-        series.SetXArray(x_vtk)
-        series.SetYArray(y_vtk)
+        # API Slicer 5.8: SetXDataArray/SetYDataArray
+        if hasattr(series, "SetXArray"):
+            series.SetXArray(x_vtk)
+            series.SetYArray(y_vtk)
+        elif hasattr(series, "SetXDataArray"):
+            series.SetXDataArray(x_vtk)
+            series.SetYDataArray(y_vtk)
+        else:
+            logger.warning(f"  No se pudo asignar datos DVH para {name}")
+            continue
 
         chart_node.AddAndObservePlotSeriesNodeID(series.GetID())
         series_nodes.append(series)
