@@ -573,7 +573,17 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
     chart_node.SetTitle("Cumulative Dose Volume Histogram")
     chart_node.SetXAxisTitle("Dose (Gy)")
     chart_node.SetYAxisTitle("Volume (%)")
-    chart_node.SetProperty("yAxisLog", "true")
+    # Escala Y log — compatible con Slicer 5.8+
+    try:
+        chart_node.SetYAxisLog(True)
+    except AttributeError:
+        try:
+            chart_node.SetProperty("yAxisLog", "true")
+        except AttributeError:
+            try:
+                chart_node.SetAttribute("yAxisLog", "1")
+            except AttributeError:
+                pass  # escala lineal
 
     series_nodes = []
     dvh_curves = []  # para exportar PNG
