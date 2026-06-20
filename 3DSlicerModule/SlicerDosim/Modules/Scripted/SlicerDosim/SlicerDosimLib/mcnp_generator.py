@@ -863,17 +863,20 @@ class MCNPInputGenerator:
         f.write("sp4 d 0 1\n")
 
         # Voxeles fuente (si5) — 2 columnas (2 tokens por linea)
+        # Formato MATLAB: (u<lat[ix iy iz]<fill) donde:
+        #   u = universo del voxel (phantom_idx)
+        #   lat = lattice cell (self._lattice_cell)
+        #   fill = fill cell (self._lattice_wrapper)
         f.write("c Voxeles Fuente\n")
-        f.write("c celda contenedora del lattice = 101 (fill=101)\n")
+        f.write(f"c Formato: (u<{self._lattice_cell}[ix iy iz]<{self._lattice_wrapper})\n")
         tokens = []
         for n in range(n_active):
             ix = active_idx[0][n]
             iy = active_idx[1][n]
             iz = active_idx[2][n]
-            # Formato MCNP correcto: (celda_fill<lattice_num[ix iy iz])
-            # Celda 101 tiene fill=101, lattice cell es 102 en u=101
-            # Se usa lattice 101 (el del fill), no 102
-            tokens.append(f"(101<101[{ix} {iy} {iz}])")
+            # Universo donde nace la particula = phantom index en ese voxel
+            phantom_idx = int(phantom_arr[ix, iy, iz])
+            tokens.append(f"({phantom_idx}<{self._lattice_cell}[{ix} {iy} {iz}]<{self._lattice_wrapper})")
 
         f.write("si5 l")
         n_written = 0
