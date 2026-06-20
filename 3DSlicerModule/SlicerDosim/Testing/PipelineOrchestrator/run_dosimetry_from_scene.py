@@ -573,17 +573,11 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
     chart_node.SetTitle("Cumulative Dose Volume Histogram")
     chart_node.SetXAxisTitle("Dose (Gy)")
     chart_node.SetYAxisTitle("Volume (%)")
-    # Escala Y log — compatible con Slicer 5.8+
-    try:
+    # Escala Y log — Slicer 5.8 usa SetYAxisLogScale(int)
+    if hasattr(chart_node, "SetYAxisLogScale"):
+        chart_node.SetYAxisLogScale(1)
+    elif hasattr(chart_node, "SetYAxisLog"):
         chart_node.SetYAxisLog(True)
-    except AttributeError:
-        try:
-            chart_node.SetProperty("yAxisLog", "true")
-        except AttributeError:
-            try:
-                chart_node.SetAttribute("yAxisLog", "1")
-            except AttributeError:
-                pass  # escala lineal
 
     series_nodes = []
     dvh_curves = []  # para exportar PNG
@@ -605,33 +599,31 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
             a_vals[i] = np.sum(doses >= d) * 100.0 / n
         # ----------------------------------------
 
-        # Crear serie en Slicer
+        # Crear tabla con datos DVH (API Slicer 5.8)
+        table_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLTableNode", f"DVH_Table_{name}"
+        )
+        table = table_node.GetTable()
+        col_x = vtk.vtkFloatArray()
+        col_x.SetName("Dose (Gy)")
+        col_y = vtk.vtkFloatArray()
+        col_y.SetName("Volume (%)")
+        for i in range(len(d_vals)):
+            col_x.InsertNextValue(float(d_vals[i]))
+            col_y.InsertNextValue(float(a_vals[i]))
+        table.AddColumn(col_x)
+        table.AddColumn(col_y)
+
+        # Crear serie que referencia la tabla
         series = slicer.mrmlScene.AddNewNodeByClass(
             "vtkMRMLPlotSeriesNode", f"DVH_{name}"
         )
+        series.SetAndObserveTableNodeID(table_node.GetID())
+        series.SetXColumnName("Dose (Gy)")
+        series.SetYColumnName("Volume (%)")
         series.SetPlotType(slicer.vtkMRMLPlotSeriesNode.PlotTypeLine)
         series.SetColor(*color)
         series.SetLineWidth(2)
-
-        # Convertir numpy arrays a vtkArrays
-        x_vtk = vtk.vtkFloatArray()
-        y_vtk = vtk.vtkFloatArray()
-        x_vtk.SetNumberOfValues(len(d_vals))
-        y_vtk.SetNumberOfValues(len(a_vals))
-        for i in range(len(d_vals)):
-            x_vtk.SetValue(i, float(d_vals[i]))
-            y_vtk.SetValue(i, float(a_vals[i]))
-
-        # API Slicer 5.8: SetXDataArray/SetYDataArray
-        if hasattr(series, "SetXArray"):
-            series.SetXArray(x_vtk)
-            series.SetYArray(y_vtk)
-        elif hasattr(series, "SetXDataArray"):
-            series.SetXDataArray(x_vtk)
-            series.SetYDataArray(y_vtk)
-        else:
-            logger.warning(f"  No se pudo asignar datos DVH para {name}")
-            continue
 
         chart_node.AddAndObservePlotSeriesNodeID(series.GetID())
         series_nodes.append(series)
