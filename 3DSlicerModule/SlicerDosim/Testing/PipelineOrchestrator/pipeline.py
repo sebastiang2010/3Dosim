@@ -108,6 +108,16 @@ class PipelineTestOrchestrator:
         )
         logger.info(f"  Scene output dir: {self.scene_output_dir}")
 
+        # Config del tumor (pipeline_config.jsonc > defaults)
+        self.tumor_config = self.pipeline_config.get("tumor", {})
+        tumor_mode = self.tumor_config.get("mode", "synthetic")
+        logger.info(f"  Tumor mode:     {tumor_mode}")
+        if tumor_mode == "load_file":
+            load_path = self.tumor_config.get("load_file_path", "")
+            logger.info(f"  Tumor file:     {load_path}")
+        elif tumor_mode == "manual":
+            logger.info(f"  Tumor segment:  {self.tumor_config.get('manual_segment_name', 'Tumor_Manual')}")
+
         # Config MCNP (CLI args > config > defaults)
         mcnp_config = self.pipeline_config.get("mcnp", {})
         self.mcnp_isotope = mcnp_isotope or mcnp_config.get("isotope", "Y-90")
@@ -364,14 +374,27 @@ class PipelineTestOrchestrator:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
-        # --- PASO: TUMOR SINTETICO ESFERICO EN EL HIGADO ---
-        self._log_consola("Creando tumor sintetico esferico (1 cm radio) en el higado...")
-        if not self._checkpoint_step(self.STEP_ADD_TUMOR, "Tumor sintetico esferico en higado",
-                                      self._add_synthetic_tumor,
-                                      data_func=lambda: {"tumor_radius_mm": 10.0}):
-            logger.warning("Creacion de tumor sintetico fallo, continuando...")
-        self._save_scene("09_tumor_sintetico")
-        self.tomar_screenshot("09_tumor_sintetico")
+        # --- PASO: CREAR TUMOR (segun config: synthetic/load_file/manual) ---
+        tumor_mode = self.tumor_config.get("mode", "synthetic")
+        mode_labels = {
+            "synthetic": "Tumor sintetico esferico en higado",
+            "load_file": "Cargar tumor desde archivo NIfTI",
+            "manual": "Segmentacion manual del tumor en Slicer",
+        }
+        step_label = mode_labels.get(tumor_mode, f"Tumor (modo: {tumor_mode})")
+        self._log_consola(f"Creando tumor (modo: {tumor_mode})...")
+        if not self._checkpoint_step(self.STEP_ADD_TUMOR, step_label,
+                                      self._add_tumor,
+                                      data_func=lambda: {"mode": tumor_mode,
+                                                         "config": self.tumor_config}):
+            logger.warning(f"Creacion de tumor (modo={tumor_mode}) fallo, continuando...")
+        scene_tag_map = {
+            "synthetic": "09_tumor_sintetico",
+            "load_file": "09_tumor_cargado",
+            "manual": "09_tumor_manual",
+        }
+        self._save_scene(scene_tag_map.get(tumor_mode, "09_tumor"))
+        self.tomar_screenshot(scene_tag_map.get(tumor_mode, "09_tumor"))
         setup_medical_views(
             ct_node=self.ct_node,
             ct_masked_node=self.ct_masked_node,
@@ -382,29 +405,32 @@ class PipelineTestOrchestrator:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
-        # --- PASO: HIGADO SANO = HIGADO - TUMOR ---
-        self._log_consola("Creando higado sano = higado - tumor...")
-        if not self._checkpoint_step(self.STEP_HEALTHY_LIVER, "Higado sano (higado - tumor)",
-                                      self._create_healthy_liver,
-                                      data_func=lambda: {"created": True}):
-            logger.warning("Creacion de higado sano fallo, continuando...")
-        self._save_scene("10_higado_sano")
-        self.tomar_screenshot("10_higado_sano")
-        setup_medical_views(
-            ct_node=self.ct_node,
-            ct_masked_node=self.ct_masked_node,
-            pet_node=self.pet_node,
-            segmentation_node=self.segmentation_node,
-            layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
-            pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
-            link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
-        )
+        # --- PASO: VERIFICAR HIGADO SANO (creado dentro de tumor_creator si aplica) ---
+        create_healthy = self.tumor_config.get("create_healthy_liver", True)
+        if create_healthy:
+            self._log_consola("Verificando higado sano = higado - tumor...")
+            if not self._checkpoint_step(self.STEP_HEALTHY_LIVER, "Higado sano (higado - tumor)",
+                                          self._create_healthy_liver,
+                                          data_func=lambda: {"created": True}):
+                logger.warning("Verificacion de higado sano fallo, continuando...")
+            self._save_scene("10_higado_sano")
+            self.tomar_screenshot("10_higado_sano")
+            setup_medical_views(
+                ct_node=self.ct_node,
+                ct_masked_node=self.ct_masked_node,
+                pet_node=self.pet_node,
+                segmentation_node=self.segmentation_node,
+                layout_name=self.pipeline_config.get("views", {}).get("layout", "ConventionalView"),
+                pet_opacity=self.pipeline_config.get("views", {}).get("pet_opacity", 0.35),
+                link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
+            )
 
         # --- PASO: VALIDACION MEDICA DEL TUMOR ---
         self._log_consola("Esperando validacion medica del tumor...")
+        tumor_context = tumor_mode  # "sintetico", "load_file", "manual"
         if not self._checkpoint_step(self.STEP_VALIDATE_TUMOR, "Validacion medica del tumor",
-                                      self._validate_tumor,
-                                      data_func=lambda: {"context": "sintetico",
+                                      lambda: self._validate_tumor(context=tumor_context),
+                                      data_func=lambda: {"context": tumor_context,
                                                          "timestamp": __import__('datetime').datetime.now().isoformat()}):
             logger.error("Validacion tumoral rechazada. Pipeline detenido.")
             self._log_consola("Validacion tumoral RECHAZADA. Pipeline detenido.")
@@ -487,9 +513,18 @@ class PipelineTestOrchestrator:
         logger.info("    5. Anonimizar")
         logger.info("    6. TotalSegmentator (task=total)")
         logger.info("    7. Validacion segmentacion")
-        logger.info("    8. Tumor sintetico esferico (1 cm radio en higado)")
+        tumor_mode = self.tumor_config.get("mode", "synthetic")
+        if tumor_mode == "synthetic":
+            logger.info("    8. Tumor sintetico esferico ({:.0f} mm radio en higado)".format(
+                self.tumor_config.get("synthetic_radius_mm", 10)))
+        elif tumor_mode == "load_file":
+            logger.info("    8. Tumor cargado desde: {}".format(
+                self.tumor_config.get("load_file_path", "N/A")))
+        elif tumor_mode == "manual":
+            logger.info("    8. Tumor segmentado manualmente en Slicer")
         logger.info("    9. Validacion medica del tumor")
-        logger.info("   10. Higado sano = higado - tumor")
+        if self.tumor_config.get("create_healthy_liver", True):
+            logger.info("   10. Higado sano = higado - tumor")
         logger.info("   11. TotalSegmentator (task=body - contorno corporal)")
         logger.info("   12. Exportar labelmap dosimetrica (NIfTI+NRRD)")
         logger.info(f"   13. Generar input MCNP ({self.mcnp_isotope}, {self.mcnp_n_particles:.0e} particulas)")
@@ -1523,29 +1558,33 @@ class PipelineTestOrchestrator:
             return True
 
     # ==================================================================
-    # TUMOR SINTETICO + HIGADO SANO
+    # TUMOR (soporta 3 modos: synthetic, load_file, manual)
     # ==================================================================
 
-    def _add_synthetic_tumor(self):
-        """Crea un tumor esferico sintetico de 1 cm radio en el higado."""
+    def _add_tumor(self):
+        """Crea tumor segun config (synthetic/load_file/manual)."""
         import slicer
         logger.info("")
         logger.info("  ========================================================")
-        logger.info("  Creando tumor sintetico esferico en el higado...")
+        logger.info("  Creando tumor (modo: {})...".format(
+            self.tumor_config.get("mode", "synthetic")))
         logger.info("  ========================================================")
 
-        tumor_creator.add_synthetic_tumor(
+        result = tumor_creator.create_tumor(
             segmentation_node=self.segmentation_node,
             ct_node=self.ct_node,
-            tumor_radius_mm=10.0,
-            liver_segment_name="liver",
+            tumor_config=self.tumor_config,
         )
+
+        # Guardar resultado para referencia (volumen, etc.)
+        self._tumor_result = result
+        logger.info(f"  Volumen tumor: {result.get('tumor_volume_cc', 'N/A')} cm^3")
+        logger.info(f"  Modo usado: {result.get('mode', 'N/A')}")
 
         logger.info("  ========================================================")
 
     def _create_healthy_liver(self):
-        """Crea higado sano = higado - tumor.
-        Ya fue creado por add_synthetic_tumor(), este paso verifica existencia."""
+        """Verifica que higado_sano fue creado (por tumor_creator)."""
         import slicer
         import vtk
 
@@ -1562,6 +1601,8 @@ class PipelineTestOrchestrator:
         seg_ids = vtk.vtkStringArray()
         seg_node.GetSegmentation().GetSegmentIDs(seg_ids)
 
+        tumor_names = {"Tumor_Sintetico", "Tumor_Cargado", "Tumor_Manual"}
+        healthy_liver_name = "higado_sano"
         found_tumor = False
         found_healthy = False
         for i in range(seg_ids.GetNumberOfValues()):
@@ -1569,21 +1610,23 @@ class PipelineTestOrchestrator:
             segment = seg_node.GetSegmentation().GetSegment(sid)
             if segment:
                 name = segment.GetName()
-                if "Tumor_Sintetico" in name:
+                if name in tumor_names:  # exact match
                     found_tumor = True
-                if "higado_sano" in name:
+                    logger.info(f"  [OK] Segmento '{name}' presente")
+                if name == healthy_liver_name:  # exact match
                     found_healthy = True
 
-        if found_tumor:
-            logger.info("  [OK] Segmento 'Tumor_Sintetico' presente")
-        else:
-            logger.warning("  Segmento 'Tumor_Sintetico' NO encontrado")
-
+        if not found_tumor:
+            logger.warning("  Ningun segmento de tumor encontrado")
         if found_healthy:
             logger.info("  [OK] Segmento 'higado_sano' presente")
             logger.info("  higado_sano = higado - tumor verificado")
         else:
-            logger.warning("  Segmento 'higado_sano' NO encontrado")
+            healthy_enabled = self.tumor_config.get("create_healthy_liver", True)
+            if healthy_enabled:
+                logger.warning("  Segmento 'higado_sano' NO encontrado")
+            else:
+                logger.info("  'create_healthy_liver'=false, saltando")
 
         logger.info("  ========================================================")
 
@@ -1591,15 +1634,19 @@ class PipelineTestOrchestrator:
     # VALIDACION MEDICA DEL TUMOR
     # ==================================================================
 
-    def _validate_tumor(self):
-        """Solicita validacion medica del tumor sintetico."""
+    def _validate_tumor(self, context="sintetico"):
+        """Solicita validacion medica del tumor.
+        
+        Args:
+            context: "sintetico" | "load_file" | "manual" — cambia el texto del dialogo.
+        """
         import slicer
         logger.info("")
         logger.info("  ========================================================")
-        logger.info("  Validacion medica del tumor...")
+        logger.info(f"  Validacion medica del tumor (contexto: {context})...")
         logger.info("  ========================================================")
 
-        ok = tumor_validation.validate_tumor_segmentation(context="sintetico")
+        ok = tumor_validation.validate_tumor_segmentation(context=context)
         if ok:
             logger.info("  [OK] Tumor validado por el medico")
         else:

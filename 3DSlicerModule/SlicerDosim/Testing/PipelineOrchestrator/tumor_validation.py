@@ -99,7 +99,8 @@ def _show_tumor_validation_dialog(context="sintetico") -> bool:
         titulo.setAlignment(1)  # Qt.AlignCenter
         layout.addWidget(titulo)
 
-        if 'sintetico' in context.lower() or 'synthetic' in context.lower():
+        ctx = context.lower() if context else ''
+        if 'sintetico' in ctx or 'synthetic' in ctx:
             instrucciones_html = (
                 '<p style="color:#555; text-align:center; font-size:12px;">'
                 'Tumor SINTETICO generado automaticamente:<br>'
@@ -115,6 +116,35 @@ def _show_tumor_validation_dialog(context="sintetico") -> bool:
                 '<br>'
                 'Si el tumor sintetico no es adecuado,<br>'
                 'marque RECHAZAR y ejecute con --reset.<br>'
+                'Luego APROBAR o RECHAZAR.</p>'
+            )
+        elif 'load_file' in ctx or 'cargado' in ctx or 'archivo' in ctx:
+            instrucciones_html = (
+                '<p style="color:#555; text-align:center; font-size:12px;">'
+                'Tumor CARGADO desde archivo NIfTI:<br>'
+                '  ✓ Segmento en la segmentacion<br>'
+                '  ✓ Segmento verde "higado_sano" (higado - tumor)<br>'
+                '<br>'
+                '<b>Revise la segmentacion tumoral:</b><br>'
+                '1. Navegue slices axial/sagital/coronal<br>'
+                '2. Use la vista 3D para inspeccionar el tumor<br>'
+                '3. Verifique que el tumor corresponda al PET/CT<br>'
+                '4. Confirme que la ubicacion es correcta<br>'
+                '<br>'
+                'Luego APROBAR o RECHAZAR.</p>'
+            )
+        elif 'manual' in ctx:
+            instrucciones_html = (
+                '<p style="color:#555; text-align:center; font-size:12px;">'
+                'Tumor segmentado MANUALMENTE en Slicer:<br>'
+                '  ✓ Segmento "Tumor_Manual" en la segmentacion<br>'
+                '  ✓ Segmento verde "higado_sano" (higado - tumor)<br>'
+                '<br>'
+                '<b>Verifique su propia segmentacion:</b><br>'
+                '1. Navegue slices axial/sagital/coronal<br>'
+                '2. Use la vista 3D para inspeccionar el resultado<br>'
+                '3. Confirme que el volumen segmentado es correcto<br>'
+                '<br>'
                 'Luego APROBAR o RECHAZAR.</p>'
             )
         else:
