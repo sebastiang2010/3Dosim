@@ -807,3 +807,44 @@ El pipeline debe comportarse como una herramienta clinica navegable:
 |---------|--------|
 | `PipelineOrchestrator/tumor_validation.py` | `_show_tumor_validation_dialog(context)` parameter agregado |
 | `PipelineOrchestrator/pipeline.py` | 3 nuevos pasos + nuevos metodos + atributos `body_node`, `labelmap_dir` |
+
+## Sesion 20-Jun — Tumor configurable: synthetic / load_file / manual
+
+### Cambios realizados
+
+| Archivo | Cambio |
+|---------|--------|
+| `pipeline_config.jsonc` | Nueva seccion `"tumor"` con mode, synthetic_radius_mm, load_file_path, manual_segment_name, create_healthy_liver |
+| `tumor_creator.py` | Refactor completo: `create_tumor()` orquesta 3 modos. Nuevas funciones `_do_synthetic()`, `_do_load_file()`, `_do_manual()`, `_add_healthy_liver_segment()`, `_show_manual_tumor_dialog()`. |
+| `tumor_validation.py` | Instrucciones contextuales por modo (sintetico, load_file, manual) |
+| `pipeline.py` | `_add_synthetic_tumor()` reemplazado por `_add_tumor()` que lee `self.tumor_config`. `_validate_tumor(context)` acepta contexto. `_create_healthy_liver()` verifica nombres de segmento flexibles. |
+
+### Modos de tumor
+
+| Modo (`mode`) | Descripcion | Config clave |
+|---------------|-------------|--------------|
+| `"synthetic"` (default) | Esfera de N mm radio en el centroide del higado | `synthetic_radius_mm`, `liver_segment_name` |
+| `"load_file"` | Carga tumor desde archivo NIfTI | `load_file_path`, `load_segment_name` |
+| `"manual"` | Usuario segmenta en Slicer con Segment Editor | `manual_segment_name` |
+
+### Configuracion ejemplo
+
+```jsonc
+"tumor": {
+    "mode": "load_file",
+    "load_file_path": "C:/MAT/3Dosim/pacientes-/pacientes/Paciente_2/segmentation liver/tumor.nii",
+    "load_segment_name": "Tumor_Cargado",
+    "create_healthy_liver": true
+}
+```
+
+### Modo manual: flujo
+1. Pipeline crea segmento vacio "Tumor_Manual" en la segmentacion
+2. Activa modulo Segment Editor
+3. Muestra dialogo NO MODAL con instrucciones
+4. Medico dibuja el tumor con Paint/Scissors/Level Tracing
+5. Medico hace clic en APROBAR
+6. Pipeline extrae mascara y crea higado_sano
+
+### Bug conocido
+- El modo `load_file` con NIfTI de distintas dimensiones al CT intenta re-muestreo con BRAINSResample. Si falla, se muestra warning y se continua con la mascara original (puede estar desalineada).
