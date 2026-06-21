@@ -281,6 +281,8 @@ class DeepSeekClient:
                          "deepseek.env"),
             # 3. Directorio padre del modulo
             os.path.join(os.path.dirname(__file__), "..", "deepseek.env"),
+            # 4. Directorio raiz de 3Dosim (si existe)
+            os.path.join("C:\\programas\\3Dosim\\3Dosim_v_3.14", "deepseek.env"),
         ]
 
         # Normalizar rutas
