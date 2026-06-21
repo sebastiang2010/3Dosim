@@ -176,6 +176,36 @@
       }
     },
     {
+      "index": 200,
+      "name": "Pretumor",
+      "name_en": "Pretumor",
+      "name_matlab": "Pretumor",
+      "color": [
+        1.0,
+        1.0,
+        0.0
+      ],
+      "hu_range": [
+        50,
+        150
+      ],
+      "density_gcm3": 1.05,
+      "mcnp_material": {
+        "id": 60,
+        "composition": {
+          "1000": 0.102,
+          "6000": 0.131,
+          "7000": 0.031,
+          "8000": 0.724,
+          "11000": 0.002,
+          "15000": 0.002,
+          "16000": 0.003,
+          "17000": 0.002,
+          "19000": 0.003
+        }
+      }
+    },
+    {
       "index": 101,
       "name": "Dientes",
       "name_en": "Teeth",

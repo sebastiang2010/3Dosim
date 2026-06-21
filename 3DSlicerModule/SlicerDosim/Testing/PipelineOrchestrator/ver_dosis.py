@@ -173,7 +173,7 @@ def recreate_dvh(dose_node=None, labelmap_node=None):
         structures = [
             ("Higado", 90, (0.2, 0.4, 1.0)),
             ("Tumor", 100, (1.0, 0.2, 0.2)),
-            ("Pretumor", 99, (0.2, 1.0, 0.2)),
+            ("Pretumor", 200, (1.0, 1.0, 0.0)),
         ]
         
         chart_node = slicer.mrmlScene.AddNewNodeByClass(

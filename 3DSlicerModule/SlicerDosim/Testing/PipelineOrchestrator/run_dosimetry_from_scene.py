@@ -3,7 +3,13 @@ run_dosimetry_from_scene.py — Pipeline de dosimetria desde escena existente.
 
 Carga una escena .mrb (con CT, PET, 3Dosim_labelmap), parsea un archivo
 MCTAL (FMESH4 tally 1), computa dosis en Gy y reporta resultados por
-estructura (higado=90, tumor=100, pretumor=99).
+estructura (higado=90, tumor=100, pretumor=200).
+
+Genera:
+  - Reporte JSON con resultados numericos
+  - Reporte TXT legible
+  - Reporte PDF multi-pagina con DVH, tablas y parametros radiobiologicos
+  - Consola interactiva Qt (comandos: screenshot, vista, fusion, nodos, etc.)
 
 Uso:
   Slicer.exe --python-script run_dosimetry_from_scene.py ^
@@ -11,9 +17,16 @@ Uso:
       --mctal "C:/MAT/3Dosim/corrida-Manu/mctal/mctal.m"
 
 Sin argumentos busca automaticamente:
-  - Escena: C:\MAT\3Dosim\ai-pipe\scenes\3Dosim_scene.mrb
-  - MCTAL:  C:\MAT\3Dosim\corrida-Manu\mctal\mctal.m
+  - Escena: C:/MAT/3Dosim/ai-pipe/scenes/3Dosim_scene.mrb
+  - MCTAL:  C:/MAT/3Dosim/corrida-Manu/mctal/mctal.m
   - Actividad: se computa del PET en la escena
+
+Opciones:
+  --activity X.X     Actividad en GBq (default: computar del PET)
+  --labelmap PATH    Ruta a labelmap NIfTI (default: busca en escena)
+  --show             Mantener Slicer abierto con DVH + consola
+  --no-consola       Deshabilitar consola interactiva Qt
+  --no-slicer        Modo standalone (solo parsear MCTAL, sin Slicer)
 
 Requiere:
   - 3D Slicer (slicer, vtk accesibles en Python)
@@ -26,7 +39,7 @@ Algoritmo:
   4. Parsea MCTAL con MCTALParser (compatible MATLAB f_cargo_mctall.m)
   5. Convierte MeV/cm³/particula → Gy (MATLAB cargo_mctal.m:389-395)
   6. Por estructura: DVH, D98/D70/D50, BED, EUD, EQD2
-  7. Reporte JSON + visualizacion en Slicer
+  7. Reporte JSON + PDF + TXT + visualizacion en Slicer
 """
 
 from __future__ import annotations
@@ -39,6 +52,14 @@ import os
 import sys
 import time
 from typing import Optional
+
+# Consola interactiva (comandos Qt como pipeline principal)
+try:
+    from PipelineOrchestrator.comandos import ConsolaComandos
+    _HAS_CONSOLE = True
+except ImportError:
+    ConsolaComandos = None
+    _HAS_CONSOLE = False
 
 # ======================================================================
 # DEBUG: primer output inmediato
@@ -61,12 +82,13 @@ except Exception as _e:
 SCENE_DEFAULT = r"C:\MAT\3Dosim\ai-pipe\scenes\3Dosim_scene.mrb"
 MCTAL_DEFAULT = r"C:\MAT\3Dosim\corrida-Manu\mctal\mctal.m"
 OUTPUT_DIR_DEFAULT = r"C:\MAT\3Dosim\ai-pipe\resultados_dosimetria"
+AI_PIPE_DIR = r"C:\MAT\3Dosim\ai-pipe"  # para PDF en raiz de ai-pipe
 LABELMAP_DEFAULT = r"C:\MAT\3Dosim\ai-pipe\3Dosim_labelmap.nii"
 
 # Indices de tejido en el labelmap (universe numbers de MCNP)
 LIVER_INDEX = 90
 TUMOR_INDEX = 100
-PRETUMOR_INDEX = 99
+PRETUMOR_INDEX = 200
 AIR_INDEX = 0
 
 # Densidades (g/cm³) — MATLAB cargo_mctal.m
@@ -564,7 +586,7 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
     structures = [
         ("Higado", LIVER_INDEX, (0.2, 0.4, 1.0)),     # azul
         ("Tumor", TUMOR_INDEX, (1.0, 0.2, 0.2)),       # rojo
-        ("Pretumor", PRETUMOR_INDEX, (0.2, 1.0, 0.2)), # verde
+        ("Pretumor", PRETUMOR_INDEX, (1.0, 1.0, 0.0)), # amarillo
     ]
 
     chart_node = slicer.mrmlScene.AddNewNodeByClass(
@@ -663,7 +685,7 @@ def _export_dvh_png(dvh_curves, filepath):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        colors = {"Higado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2), "Pretumor": (0.2, 1.0, 0.2)}
+        colors = {"Higado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2), "Pretumor": (1.0, 1.0, 0.0)}
 
         fig, ax = plt.subplots(figsize=(10, 6))
         for name, d_vals, a_vals in dvh_curves:
@@ -683,6 +705,333 @@ def _export_dvh_png(dvh_curves, filepath):
         logger.info(f"  DVH PNG exportado: {filepath}")
     except ImportError:
         logger.warning("  matplotlib no disponible para exportar PNG")
+
+
+# ======================================================================
+# 8. Generacion de PDF Report
+# ======================================================================
+
+def generate_pdf_report(
+    results: dict,
+    output_dir: str,
+    dvh_curves: list = None,
+) -> str:
+    """
+    Genera un reporte PDF completo con:
+      - Pagina 1: Portada con metadatos
+      - Pagina 2: Parametros radiobiologicos
+      - Pagina 3: Resultados dosimetricos por estructura
+      - Pagina 4: DVH acumulativo
+      - Pagina 5: MIRD partition model
+
+    Args:
+        results: dict con metadata, structures (resultados por estructura), mird
+        output_dir: directorio donde guardar el PDF
+        dvh_curves: list of (name, d_vals_array, a_vals_array) para graficar DVH
+
+    Returns:
+        ruta al PDF generado, o None si fallo
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_pdf import PdfPages
+        import matplotlib.ticker as ticker
+    except ImportError:
+        logger.warning("  matplotlib no disponible para PDF")
+        return None
+
+    pdf_path = os.path.join(output_dir, "dosimetria_report.pdf")
+    meta = results.get("metadata", {})
+    structures = results.get("structures", {})
+    mird = results.get("mird", {})
+
+    # Colores por estructura
+    struct_colors = {
+        "higado":   (0.2, 0.4, 1.0),
+        "tumor":    (1.0, 0.2, 0.2),
+        "pretumor": (1.0, 1.0, 0.0),
+    }
+    struct_labels = {"higado": "Higado", "tumor": "Tumor", "pretumor": "Pretumor"}
+
+    with PdfPages(pdf_path) as pdf:
+
+        # ---- Pagina 1: Portada ----
+        fig = plt.figure(figsize=(8.27, 11.69))  # A4
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.axis("off")
+
+        # Fondo oscuro header
+        ax.fill_between([0, 1], 0.65, 1.0, color="#1a237e", alpha=0.9, transform=ax.transAxes)
+        ax.text(0.5, 0.88, "REPORTE DE DOSIMETRIA", fontsize=24, fontweight="bold",
+                color="white", ha="center", va="center", transform=ax.transAxes)
+        ax.text(0.5, 0.80, "3Dosim v3.14 — Dosimetria 3D para Medicina Nuclear",
+                fontsize=12, color="#bbdefb", ha="center", va="center", transform=ax.transAxes)
+
+        # Linea separadora (hlines acepta transform, axhline no)
+        try:
+            ax.hlines(0.62, 0.15, 0.85, color="#1a237e", linewidth=2, transform=ax.transAxes)
+        except Exception:
+            ax.axhline(0.62, 0.15, 0.85, color="#1a237e", linewidth=2)
+
+        # Metadatos
+        x0, y0 = 0.15, 0.55
+        step = 0.035
+        items = [
+            ("Escena", meta.get("scene", "N/A")),
+            ("Archivo MCTAL", meta.get("mctal", "N/A")),
+            ("Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"),
+            ("NPS", f"{meta.get('nps', 0):,}"),
+            ("Dimensiones", f"{meta.get('dimensions', [])}"),
+        ]
+        for label, value in items:
+            ax.text(x0, y0, label + ":", fontsize=10, fontweight="bold",
+                    color="#333", transform=ax.transAxes)
+            ax.text(x0 + 0.2, y0, str(value), fontsize=10, color="#555",
+                    transform=ax.transAxes)
+            y0 -= step
+
+        # Resumen rapido
+        try:
+            ax.hlines(y0 - 0.02, 0.15, 0.85, color="#ccc", linewidth=1, transform=ax.transAxes)
+        except Exception:
+            ax.axhline(y0 - 0.02, 0.15, 0.85, color="#ccc", linewidth=1)
+        y0 -= 0.06
+        ax.text(x0, y0, "RESUMEN POR ESTRUCTURA", fontsize=11, fontweight="bold",
+                color="#1a237e", transform=ax.transAxes)
+        y0 -= step
+
+        for name, s in structures.items():
+            label = struct_labels.get(name, name)
+            clr = struct_colors.get(name, (0.5, 0.5, 0.5))
+            ax.text(x0, y0, f"  {label}:", fontsize=9, color=clr,
+                    fontweight="bold", transform=ax.transAxes)
+            ax.text(x0 + 0.25, y0,
+                    f"Dmedia = {s.get('mean_dose_gy', 0):.2f} Gy  |  "
+                    f"D98 = {s.get('d98_gy', 0):.2f} Gy  |  "
+                    f"BED = {s.get('bed_gy', 0):.2f} Gy",
+                    fontsize=8, color="#555", transform=ax.transAxes)
+            y0 -= step
+
+        # Footer
+        y0 -= step
+        ax.text(x0, y0, f"Generado: {time.strftime('%Y-%m-%d %H:%M')}",
+                fontsize=8, color="#999", transform=ax.transAxes)
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # ---- Pagina 2: Parametros radiobiologicos ----
+        fig, ax = plt.subplots(figsize=(8.27, 11.69))
+        ax.axis("off")
+        ax.set_title("PARAMETROS RADIOBIOLOGICOS", fontsize=16, fontweight="bold",
+                      color="#1a237e", pad=20)
+
+        y0 = 0.85
+        step = 0.045
+
+        ax.text(0.1, y0, "Parametros del modelo:", fontsize=12, fontweight="bold",
+                color="#333", transform=ax.transAxes)
+        y0 -= step * 0.5
+
+        params = [
+            (r"$t_{1/2}$ Y-90", f"{Y90_HALF_LIFE_H:.1f} h"),
+            (r"$\lambda$ (constante de decaimiento)", f"{LAMDA_DECAY:.4f} h$^{{-1}}$"),
+            (r"$\mu$ (tasa de reparacion)", f"{MU_REPAIR:.2f} h$^{{-1}}$"),
+            (r"$T_{\mathrm{repair}}$", f"{1/MU_REPAIR:.1f} h"),
+            (r"$\tau$ (mean life)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f} s"),
+            (r"Conversion MeV $\to$ J", f"{MEV2J}"),
+            (r"K MIRD", "48.98 J·s"),
+        ]
+        for label, value in params:
+            ax.text(0.12, y0, label, fontsize=9, color="#333", transform=ax.transAxes)
+            ax.text(0.55, y0, value, fontsize=9, color="#555", transform=ax.transAxes)
+            y0 -= step
+
+        y0 -= step
+        try:
+            ax.hlines(y0 + step * 0.3, 0.1, 0.9, color="#ccc", linewidth=1, transform=ax.transAxes)
+        except Exception:
+            ax.axhline(y0 + step * 0.3, 0.1, 0.9, color="#ccc", linewidth=1)
+
+        ax.text(0.1, y0, r"Relaciones $\alpha / \beta$ por estructura:", fontsize=12,
+                fontweight="bold", color="#333", transform=ax.transAxes)
+        y0 -= step * 0.5
+
+        ab_items = [
+            ("Higado  (indice=90)", f"$\\alpha/\\beta$ = {ALPHA_BETA_LIVER} Gy",
+             "tejido normal", (0.2, 0.4, 1.0)),
+            ("Tumor   (indice=100)", f"$\\alpha/\\beta$ = {ALPHA_BETA_TUMOR} Gy",
+             "tumor", (1.0, 0.2, 0.2)),
+            ("Pretumor (indice=200)", f"$\\alpha/\\beta$ = {ALPHA_BETA_LIVER} Gy",
+             "tejido normal (higado)", (1.0, 1.0, 0.0)),
+        ]
+        for name_str, ab_str, tipo, clr in ab_items:
+            ax.text(0.12, y0, name_str, fontsize=9, color=clr, fontweight="bold",
+                    transform=ax.transAxes)
+            ax.text(0.55, y0, ab_str, fontsize=9, color="#333", transform=ax.transAxes)
+            ax.text(0.78, y0, tipo, fontsize=8, color="#888", transform=ax.transAxes)
+            y0 -= step
+
+        y0 -= step
+        ax.text(0.1, y0, "Densidades asignadas:", fontsize=12,
+                fontweight="bold", color="#333", transform=ax.transAxes)
+        y0 -= step * 0.5
+        dens_items = [
+            ("Higado / Tumor / Pretumor", f"{DENSIDAD_LIVER:.2f} g/cm$^3$"),
+            ("Body (default)", f"{DENSIDAD_BODY:.1f} g/cm$^3$"),
+            ("Aire", f"{DENSIDAD_AIR:.3f} g/cm$^3$"),
+        ]
+        for label, value in dens_items:
+            ax.text(0.12, y0, label, fontsize=9, color="#333", transform=ax.transAxes)
+            ax.text(0.55, y0, value, fontsize=9, color="#555", transform=ax.transAxes)
+            y0 -= step
+
+        y0 -= step
+        ax.text(0.1, y0, "Formulas:", fontsize=12, fontweight="bold",
+                color="#333", transform=ax.transAxes)
+        y0 -= step * 0.5
+        formulas = [
+            r"BED = D + $\frac{\lambda}{(\alpha/\beta)(\lambda + \mu)}$ D$^2$",
+            r"EUD = $(\sum v_i D_i^a)^{1/a}$",
+            r"EQD2 = BED / (1 + 2 / $(\alpha/\beta)$)",
+            r"D [Gy] = D [MeV/g] $\cdot$ 1.6e$^{-13}$ $\cdot$ t$\tau$ $\cdot$ Act $\cdot$ 1000",
+        ]
+        for formula in formulas:
+            ax.text(0.12, y0, formula, fontsize=9, color="#555", transform=ax.transAxes)
+            y0 -= step
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # ---- Pagina 3: Resultados por estructura ----
+        fig, ax = plt.subplots(figsize=(8.27, 11.69))
+        ax.axis("off")
+        ax.set_title("RESULTADOS DOSIMETRICOS POR ESTRUCTURA", fontsize=14,
+                      fontweight="bold", color="#1a237e", pad=20)
+
+        y0 = 0.90
+        # Tabla de resultados
+        headers = ["Estructura", "Voxeles", "Dmedia(Gy)", "D98(Gy)",
+                    "D70(Gy)", "D50(Gy)", "BED(Gy)", "EUD(Gy)", "EQD2(Gy)"]
+        col_widths = [0.16, 0.08, 0.10, 0.09, 0.09, 0.09, 0.10, 0.10, 0.10]
+        x_positions = [0.08]
+        for w in col_widths[:-1]:
+            x_positions.append(x_positions[-1] + w)
+
+        # Encabezados
+        for i, h in enumerate(headers):
+            ax.text(x_positions[i], y0, h, fontsize=8, fontweight="bold",
+                    color="white", transform=ax.transAxes)
+        # Fondo header
+        ax.fill_between([0.05, 0.95], y0 - 0.025, y0 + 0.015,
+                        color="#1a237e", alpha=0.9, transform=ax.transAxes)
+        y0 -= 0.04
+
+        for name, s in structures.items():
+            label = struct_labels.get(name, name)
+            clr = struct_colors.get(name, (0.5, 0.5, 0.5))
+            row_data = [
+                label,
+                f"{s.get('n_voxels', 0):,}",
+                f"{s.get('mean_dose_gy', 0):.2f}",
+                f"{s.get('d98_gy', 0):.2f}",
+                f"{s.get('d70_gy', 0):.2f}",
+                f"{s.get('d50_gy', 0):.2f}",
+                f"{s.get('bed_gy', 0):.2f}",
+                f"{s.get('eud_gy', 0):.2f}",
+                f"{s.get('eqd2_gy', 0):.2f}",
+            ]
+            for i, val in enumerate(row_data):
+                ax.text(x_positions[i], y0, val, fontsize=8, color=clr if i == 0 else "#333",
+                        fontweight="bold" if i == 0 else "normal", transform=ax.transAxes)
+            y0 -= 0.03
+
+        # MIRD section
+        y0 -= 0.03
+        try:
+            ax.hlines(y0 + 0.01, 0.08, 0.92, color="#333", linewidth=1.5, transform=ax.transAxes)
+        except Exception:
+            ax.axhline(y0 + 0.01, 0.08, 0.92, color="#333", linewidth=1.5)
+        y0 -= 0.01
+        ax.text(0.08, y0, "MIRD PARTITION MODEL", fontsize=12, fontweight="bold",
+                color="#1a237e", transform=ax.transAxes)
+        y0 -= 0.035
+
+        mird_items = [
+            ("Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"),
+            ("Higado", f"{mird.get('liver', {}).get('mean_dose_gy', 0):.2f} Gy"),
+            ("Tumor", f"{mird.get('tumor', {}).get('mean_dose_gy', 0):.2f} Gy"),
+        ]
+        if "pretumor" in mird:
+            mird_items.append(
+                ("Pretumor", f"{mird['pretumor'].get('mean_dose_gy', 0):.2f} Gy")
+            )
+        for label, value in mird_items:
+            ax.text(0.12, y0, label + ":", fontsize=9, fontweight="bold",
+                    color="#333", transform=ax.transAxes)
+            ax.text(0.35, y0, value, fontsize=9, color="#555", transform=ax.transAxes)
+            y0 -= 0.03
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # ---- Pagina 4: DVH ----
+        if dvh_curves:
+            fig, ax = plt.subplots(figsize=(8.27, 6.0))
+            dvh_colors = {"Higado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2),
+                          "Pretumor": (1.0, 1.0, 0.0)}
+            for name, d_vals, a_vals in dvh_curves:
+                c = dvh_colors.get(name, (0.5, 0.5, 0.5))
+                ax.plot(d_vals, a_vals, color=c, label=name, linewidth=2)
+            ax.set_xlabel("Dose (Gy)", fontsize=12, fontweight="bold")
+            ax.set_ylabel("Volume (%)", fontsize=12, fontweight="bold")
+            ax.set_title("Cumulative Dose Volume Histogram (DVH)", fontsize=14,
+                         fontweight="bold")
+            ax.set_yscale("log")
+            ax.set_ylim(0.1, 200)
+            ax.grid(True, which="both", alpha=0.3)
+            ax.legend(fontsize=11)
+            fig.tight_layout()
+
+            # Agregar tabla de metricas debajo del DVH
+            fig2, ax2 = plt.subplots(figsize=(8.27, 3.5))
+            ax2.axis("off")
+            ax2.set_title("Metricas DVH por estructura", fontsize=12,
+                          fontweight="bold", color="#1a237e", pad=10)
+            y2 = 0.75
+            dvh_headers = ["Estructura", "Dmedia(Gy)", "D98(Gy)", "D70(Gy)",
+                           "D50(Gy)", "Max(Gy)", "BED(Gy)", "EUD(Gy)"]
+            dvh_x = [0.06, 0.18, 0.26, 0.34, 0.42, 0.50, 0.58, 0.66]
+            for i, h in enumerate(dvh_headers):
+                ax2.text(dvh_x[i], y2, h, fontsize=8, fontweight="bold",
+                         color="white", transform=ax2.transAxes)
+            ax2.fill_between([0.03, 0.72], y2 - 0.03, y2 + 0.015,
+                             color="#1a237e", alpha=0.9, transform=ax2.transAxes)
+            y2 -= 0.04
+            for name, s in structures.items():
+                label = struct_labels.get(name, name)
+                clr = struct_colors.get(name, (0.5, 0.5, 0.5))
+                row = [label, f"{s.get('mean_dose_gy', 0):.2f}",
+                       f"{s.get('d98_gy', 0):.2f}", f"{s.get('d70_gy', 0):.2f}",
+                       f"{s.get('d50_gy', 0):.2f}", f"{s.get('max_dose_gy', 0):.2f}",
+                       f"{s.get('bed_gy', 0):.2f}", f"{s.get('eud_gy', 0):.2f}"]
+                for i, val in enumerate(row):
+                    ax2.text(dvh_x[i], y2, val, fontsize=8,
+                             color=clr if i == 0 else "#333",
+                             fontweight="bold" if i == 0 else "normal",
+                             transform=ax2.transAxes)
+                y2 -= 0.03
+
+            pdf.savefig(fig)
+            pdf.savefig(fig2)
+            plt.close(fig)
+            plt.close(fig2)
+
+        logger.info(f"  Reporte PDF: {pdf_path}")
+
+    return pdf_path
 
 
 # ======================================================================
@@ -742,7 +1091,9 @@ def main():
     parser.add_argument("--no-slicer", action="store_true",
                         help="No cargar en Slicer (solo parsear MCTAL)")
     parser.add_argument("--show", action="store_true",
-                        help="Mantener Slicer abierto con resultados visibles")
+                        help="Mantener Slicer abierto con DVH + consola interactiva")
+    parser.add_argument("--no-consola", action="store_true",
+                        help="No mostrar consola interactiva (default: mostrar si disponible)")
 
     args, _ = parser.parse_known_args()
 
@@ -762,8 +1113,44 @@ def main():
     log(" 3Dosim Dosimetry Pipeline v3.14")
     log("=" * 60)
 
+    # Consola interactiva (como pipeline.py)
+    # Si es --no-slicer, no hay Qt → no hay consola
+    consola = None
+    if _HAS_CONSOLE and not args.no_consola and not args.no_slicer:
+        try:
+            consola = ConsolaComandos(output_dir=output_dir)
+            consola.mostrar()
+            consola.log("=" * 50)
+            consola.log(" 3Dosim Dosimetry Pipeline - Consola de Comandos")
+            consola.log(" Escribi 'ayuda' para comandos disponibles")
+            consola.log("=" * 50)
+            consola.log("")
+        except Exception as e:
+            logger.warning(f"  No se pudo crear consola: {e}")
+            consola = None
+
+    def _log_consola(msg):
+        if consola:
+            try:
+                consola.log(msg)
+            except Exception:
+                pass
+    def _log_consola_ok(msg):
+        if consola:
+            try:
+                consola.log_ok(msg)
+            except Exception:
+                pass
+    def _log_consola_error(msg):
+        if consola:
+            try:
+                consola.log_error(msg)
+            except Exception:
+                pass
+
     found = setup_slicer_paths()
     log(f"  SlicerDosimLib path found: {found}")
+    _log_consola("Iniciando pipeline de dosimetria...")
 
     # ----------------------------------------------------------------
     # Cargar escena en Slicer
@@ -772,11 +1159,14 @@ def main():
         import slicer
 
         logger.info("\n--- Paso 1: Cargar escena ---")
+        _log_consola("Paso 1/10: Cargando escena...")
         if not load_scene(scene_path):
             logger.error("Abortando: no se pudo cargar la escena")
+            _log_consola_error("Error cargando escena")
             return 1
 
         logger.info("\n--- Paso 2: Buscar nodos ---")
+        _log_consola("Paso 2/10: Buscando nodos (CT, PET, Labelmap)...")
         nodes = find_nodes()
 
         labelmap_nifti = args.labelmap or LABELMAP_DEFAULT
@@ -812,10 +1202,12 @@ def main():
             activity_bq = activity_gbq * 1e9
         elif pet_node is not None:
             logger.info("\n--- Paso 3: Computar actividad desde PET ---")
+            _log_consola("Paso 3/10: Computando actividad desde PET...")
             activity_bq = compute_activity_from_pet(pet_node)
             activity_gbq = activity_bq / 1e9
         else:
             logger.error("No hay PET y no se especifico --activity")
+            _log_consola_error("No hay PET ni --activity. Abortando.")
             return 1
 
         logger.info(f"  Actividad: {activity_bq:.2e} Bq = {activity_gbq:.4f} GBq")
@@ -832,14 +1224,17 @@ def main():
     # Parsear MCTAL
     # ----------------------------------------------------------------
     logger.info("\n--- Paso 4: Parsear MCTAL ---")
+    _log_consola("Paso 4/10: Parseando archivo MCTAL (907 MB)...")
     mctal_result = parse_mctal(mctal_path, dims)
     dose_mev_cm3 = mctal_result["dose_3d"]
     error_3d = mctal_result["uncertainty"]
+    _log_consola_ok(f"MCTAL parseado: NPS={mctal_result['nps']:,}")
 
     # ----------------------------------------------------------------
     # Convertir a Gy
     # ----------------------------------------------------------------
     logger.info("\n--- Paso 5: Convertir a Gy ---")
+    _log_consola("Paso 5/10: Convirtiendo MeV/cm3 a Gy...")
 
     # Tiempo de integracion (mean lifetime)
     t_meanlife_s = Y90_HALF_LIFE_H * 3600 / np.log(2)  # ~332,753 s
@@ -870,11 +1265,12 @@ def main():
     # Computar dosimetria por estructura
     # ----------------------------------------------------------------
     logger.info("\n--- Paso 6: Dosimetria por estructura ---")
+    _log_consola("Paso 6/10: Computando DVH y radiobiologia...")
 
     structures = {
         "higado": {"idx": LIVER_INDEX, "alpha_beta": ALPHA_BETA_LIVER, "is_tumor": False},
         "tumor": {"idx": TUMOR_INDEX, "alpha_beta": ALPHA_BETA_TUMOR, "is_tumor": True},
-        "pretumor": {"idx": PRETUMOR_INDEX, "alpha_beta": ALPHA_BETA_TUMOR, "is_tumor": False},
+        "pretumor": {"idx": PRETUMOR_INDEX, "alpha_beta": ALPHA_BETA_LIVER, "is_tumor": False},  # tejido normal como higado
     }
 
     results = {
@@ -934,6 +1330,7 @@ def main():
     # MIRD partition model
     # ----------------------------------------------------------------
     logger.info("\n--- Paso 7: MIRD partition model ---")
+    _log_consola("Paso 7/10: Calculando MIRD partition model...")
     mird = compute_mird(dose_gy, labelmap, activity_gbq)
     results["mird"] = mird
     logger.info(f"  Hígado: {mird['liver']['mean_dose_gy']:.2f} Gy")
@@ -993,8 +1390,49 @@ def main():
     logger.info(f"  Reporte TXT: {report_txt_path}")
 
     # ----------------------------------------------------------------
+    # Generar PDF report
+    # ----------------------------------------------------------------
+    _log_consola("Paso 8/10: Generando reporte PDF...")
+    logger.info("\n--- Paso 8b: Generar PDF report ---")
+    # Recolectar curvas DVH para el PDF desde structures del results
+    dvh_curves_for_pdf = []
+    dvh_pdf_colors = {"higado": (0.2, 0.4, 1.0), "tumor": (1.0, 0.2, 0.2),
+                      "pretumor": (1.0, 1.0, 0.0)}
+    dvh_pdf_labels = {"higado": "Higado", "tumor": "Tumor", "pretumor": "Pretumor"}
+    try:
+        for name in structures:
+            if name not in results["structures"]:
+                continue
+            s = results["structures"][name]
+            idx = s["index"]
+            mask = labelmap == idx
+            doses = dose_gy[mask]
+            n = len(doses)
+            if n == 0 or np.max(doses) <= 0:
+                continue
+            Dmax = float(np.max(doses))
+            delta = Dmax / 1000.0
+            d_vals = np.arange(0, Dmax + delta, delta)
+            a_vals = np.zeros(len(d_vals))
+            for i, d in enumerate(d_vals):
+                a_vals[i] = np.sum(doses >= d) * 100.0 / n
+            dvh_curves_for_pdf.append((dvh_pdf_labels.get(name, name), d_vals, a_vals))
+
+        pdf_path = generate_pdf_report(results, AI_PIPE_DIR, dvh_curves_for_pdf)
+        if pdf_path:
+            _log_consola_ok(f"PDF generado: {os.path.basename(pdf_path)}")
+        else:
+            _log_consola_error("No se pudo generar PDF (matplotlib?)")
+    except Exception as e:
+        _log_consola_error(f"Error generando PDF: {e}")
+        logger.warning(f"  Error generando PDF: {e}")
+        import traceback
+        logger.warning(traceback.format_exc())
+
+    # ----------------------------------------------------------------
     # Crear nodo de dosis en Slicer
     # ----------------------------------------------------------------
+    dose_node = None  # default, se setea abajo si exitoso
     if not args.no_slicer:
         logger.info("\n--- Paso 9: Crear nodo de dosis 3D en Slicer ---")
         try:
@@ -1045,6 +1483,7 @@ def main():
     # ----------------------------------------------------------------
     if not args.no_slicer:
         logger.info("\n--- Paso 10: Graficar DVH en Slicer ---")
+        _log_consola("Paso 10/10: Graficando DVH en Slicer...")
         try:
             _create_dvh_plots_slicer(dose_gy, labelmap, spacing, args.show)
         except Exception as e:
@@ -1052,20 +1491,38 @@ def main():
             import traceback
             logger.warning(traceback.format_exc())
 
-    # Mantener Slicer abierto si --show
-    if args.show:
+    # Resumen final en consola
+    _log_consola("=" * 50)
+    _log_consola("PIPELINE DE DOSIMETRIA COMPLETADO")
+    _log_consola(f"  Actividad: {activity_gbq:.4f} GBq")
+    for name, s in results.get("structures", {}).items():
+        label = {"higado": "Higado", "tumor": "Tumor", "pretumor": "Pretumor"}.get(name, name)
+        _log_consola(f"  {label}: Dmedia={s.get('mean_dose_gy', 0):.2f} Gy, "
+                     f"BED={s.get('bed_gy', 0):.2f} Gy")
+    _log_consola(f"  PDF: dosimetria_report.pdf")
+    _log_consola("=" * 50)
+
+    # Mantener Slicer abierto si --show O si hay consola interactiva
+    keep_alive = args.show or (consola is not None)
+    if keep_alive:
+        if args.show:
+            try:
+                slicer.util.selectModule("Plots")
+                slicer.app.processEvents()
+                if dose_node:
+                    slicer.util.setSliceViewerLayers(foreground=dose_node, foregroundOpacity=0.4)
+                slicer.app.layoutManager().setLayout(
+                    slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
+            except Exception:
+                pass
+
+        if consola:
+            _log_consola("Consola activa. Escribi 'ayuda' para comandos, 'salir' para cerrar.")
+
         logger.info("  --show: Slicer queda abierto. Cerrar ventana para salir.")
+        logger.info("  Consola interactiva activa.")
         sys.stderr.flush()
-        slicer.util.selectModule("Plots")
-        slicer.app.processEvents()
-        # Abrir el nodo de dosis en el slice viewer
-        if dose_node:
-            slicer.util.setSliceViewerLayers(foreground=dose_node, foregroundOpacity=0.4)
-        # Layout: arriba plots, abajo slices
-        slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
-        # NO usar slicer.app.exec() — el event loop ya esta corriendo
-        # y exec() falla, permitiendo que el script termine y Slicer se cierre.
-        # En vez: loop con processEvents() mantiene el script vivo.
+        # Loop: mantiene vivo tanto Slicer como la consola
         try:
             while True:
                 slicer.app.processEvents()

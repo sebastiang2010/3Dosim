@@ -185,11 +185,17 @@ def _show_validation_dialog(titulo="Segmentacion", context="segmentacion") -> bo
         dialog.adjustSize()
         main_rect = main.geometry
         dlg_rect = dialog.geometry
+        dialog.move(
+            main_rect.x() + (main_rect.width() - dlg_rect.width()) // 2,
+            main_rect.y() + (main_rect.height() - dlg_rect.height()) // 2,
+        )
 
         logger.info("  VALIDACION MEDICA — dialogo NO MODAL, Slicer COMPLETAMENTE operativo")
         logger.info("  Navegue slices, oculte PET, revise en 3D, luego APROBAR o RECHAZAR")
 
         dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
         # Event loop REAL de Qt: Slicer responde 100%, el medico
         # puede navegar slices, modificar ROIs, rotar 3D, etc.

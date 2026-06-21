@@ -49,6 +49,9 @@ DEFAULT_NAME_TO_PHANTOM = {
     # Tumor (index 100)
     "tumor": 100,
     "Tumor_Sintetico": 100,
+    # Pretumor (index 200)
+    "pretumor": 200,
+    "Pretumor": 200,
     # Body (Tejido_blando index 30)
     "body": 30,
     "trunk": 30,
