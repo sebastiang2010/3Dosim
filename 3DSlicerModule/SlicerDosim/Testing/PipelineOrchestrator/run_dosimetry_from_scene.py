@@ -584,9 +584,9 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
     import vtk
 
     structures = [
-        ("Higado", LIVER_INDEX, (0.2, 0.4, 1.0)),     # azul
+        ("Hígado", LIVER_INDEX, (0.2, 0.4, 1.0)),     # azul
         ("Tumor", TUMOR_INDEX, (1.0, 0.2, 0.2)),       # rojo
-        ("Pretumor", PRETUMOR_INDEX, (1.0, 1.0, 0.0)), # amarillo
+        ("Peritumoral", PRETUMOR_INDEX, (0.8, 0.6, 0.0)), # amarillo
     ]
 
     chart_node = slicer.mrmlScene.AddNewNodeByClass(
@@ -661,7 +661,13 @@ def _create_dvh_plots_slicer(dose_gy, labelmap, spacing, show_gui=True):
         if plotWidget:
             plotView = plotWidget.plotView()
             if plotView:
-                plotView.SetChartNodeID(chart_node.GetID())
+                # Slicer 5.8 usa SetPlotChartNodeID (no SetChartNodeID)
+                if hasattr(plotView, "SetPlotChartNodeID"):
+                    plotView.SetPlotChartNodeID(chart_node.GetID())
+                elif hasattr(plotView, "SetChartNodeID"):
+                    plotView.SetChartNodeID(chart_node.GetID())
+                else:
+                    logger.warning("  No se pudo asignar chart al PlotView: metodo no encontrado")
         slicer.app.processEvents()
 
     # Exportar imagen PNG
@@ -685,7 +691,7 @@ def _export_dvh_png(dvh_curves, filepath):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        colors = {"Higado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2), "Pretumor": (1.0, 1.0, 0.0)}
+        colors = {"Hígado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2), "Peritumoral": (0.8, 0.6, 0.0)}
 
         fig, ax = plt.subplots(figsize=(10, 6))
         for name, d_vals, a_vals in dvh_curves:
@@ -708,8 +714,14 @@ def _export_dvh_png(dvh_curves, filepath):
 
 
 # ======================================================================
-# 8. Generacion de PDF Report
+# 8. Generacion de PDF Report (reportlab)
 # ======================================================================
+
+def _add_page_number(fig, page_num, total=5):
+    """Agrega numero de pagina y footer al pie de la figura (matplotlib fallback)."""
+    fig.text(0.5, 0.01, f"Pagina {page_num}/{total}  |  3Dosim v3.14",
+             fontsize=8, color="#888", ha="center", va="bottom")
+
 
 def generate_pdf_report(
     results: dict,
@@ -717,27 +729,436 @@ def generate_pdf_report(
     dvh_curves: list = None,
 ) -> str:
     """
-    Genera un reporte PDF completo con:
-      - Pagina 1: Portada con metadatos
-      - Pagina 2: Parametros radiobiologicos
-      - Pagina 3: Resultados dosimetricos por estructura
-      - Pagina 4: DVH acumulativo
-      - Pagina 5: MIRD partition model
+    Genera reporte PDF con reportlab (5 paginas):
+      P1: Portada con metadatos y resumen
+      P2: Parametros radiobiologicos
+      P3: Resultados dosimetricos por estructura + MIRD
+      P4: DVH acumulativo (matplotlib embebido)
+      P5: Metricas DVH por estructura
 
     Args:
-        results: dict con metadata, structures (resultados por estructura), mird
+        results: dict con metadata, structures, mird
         output_dir: directorio donde guardar el PDF
-        dvh_curves: list of (name, d_vals_array, a_vals_array) para graficar DVH
+        dvh_curves: list of (name, d_vals_array, a_vals_array)
 
     Returns:
         ruta al PDF generado, o None si fallo
     """
     try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm, cm
+        from reportlab.lib.colors import HexColor, Color, black, white
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                         Table, TableStyle, PageBreak, Image,
+                                         KeepTogether)
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+    except ImportError:
+        logger.warning("  reportlab no disponible — usando matplotlib como fallback")
+        return _generate_pdf_matplotlib_fallback(results, output_dir, dvh_curves)
+
+    pdf_path = os.path.join(output_dir, "dosimetria_report.pdf")
+    meta = results.get("metadata", {})
+    structures = results.get("structures", {})
+    mird = results.get("mird", {})
+
+    # -- Colores --
+    C_PRIMARY = HexColor("#1a237e")
+    C_HEADER_BG = HexColor("#1a237e")
+    C_HEADER_FG = white
+    C_LIGHT_BG = HexColor("#e8eaf6")
+    C_GRAY = HexColor("#666666")
+    C_DARK = HexColor("#333333")
+    C_HIGADO = HexColor("#3366cc")
+    C_TUMOR = HexColor("#cc3333")
+    C_PERITUMORAL = HexColor("#cc9900")
+
+    struct_colors_hex = {"higado": C_HIGADO, "tumor": C_TUMOR, "pretumor": C_PERITUMORAL}
+    struct_labels = {"higado": "Hígado", "tumor": "Tumor", "pretumor": "Peritumoral"}
+
+    # -- Estilos --
+    styles = getSampleStyleSheet()
+    s_title = ParagraphStyle("Title2", parent=styles["Title"],
+                             fontSize=24, textColor=C_PRIMARY, spaceAfter=6)
+    s_subtitle = ParagraphStyle("Sub", parent=styles["Normal"],
+                                fontSize=12, textColor=C_GRAY, alignment=TA_CENTER)
+    s_heading = ParagraphStyle("Head", parent=styles["Heading2"],
+                               fontSize=14, textColor=C_PRIMARY, spaceBefore=12, spaceAfter=6)
+    s_heading3 = ParagraphStyle("Head3", parent=styles["Heading3"],
+                                fontSize=12, textColor=C_PRIMARY, spaceBefore=8, spaceAfter=4)
+    s_normal = ParagraphStyle("Norm", parent=styles["Normal"],
+                              fontSize=10, textColor=C_DARK, leading=14)
+    s_small = ParagraphStyle("Small", parent=styles["Normal"],
+                             fontSize=9, textColor=C_GRAY, leading=12)
+    s_bold = ParagraphStyle("Bold", parent=styles["Normal"],
+                            fontSize=10, textColor=C_DARK, leading=14,
+                            fontName="Helvetica-Bold")
+
+    def add_footer(canvas_obj, doc):
+        """Footer comun para todas las paginas."""
+        canvas_obj.saveState()
+        canvas_obj.setFont("Helvetica", 8)
+        canvas_obj.setFillColor(HexColor("#999999"))
+        canvas_obj.drawCentredString(A4[0] / 2, 15 * mm,
+                                     f"3Dosim v3.14  |  Pagina {doc.page}")
+        canvas_obj.restoreState()
+
+    doc = SimpleDocTemplate(
+        pdf_path, pagesize=A4,
+        leftMargin=20 * mm, rightMargin=20 * mm,
+        topMargin=20 * mm, bottomMargin=25 * mm,
+    )
+    story = []
+    usable_width = A4[0] - 40 * mm
+
+    # ================================================================
+    # PAGINA 1: PORTADA
+    # ================================================================
+    # Header azul
+    header_data = [[""]]
+    header_table = Table(header_data, colWidths=[usable_width], rowHeights=[80])
+    header_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), C_PRIMARY),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, -60))
+    story.append(Paragraph("REPORTE DE DOSIMETRIA", s_title))
+    story.append(Paragraph("3Dosim v3.14 — Dosimetria 3D para Medicina Nuclear", s_subtitle))
+    story.append(Spacer(1, 20 * mm))
+
+    # Metadatos
+    story.append(Paragraph("Metadatos del Estudio", s_heading))
+    meta_items = [
+        ["Escena", meta.get("scene", "N/A")],
+        ["Archivo MCTAL", meta.get("mctal", "N/A")],
+        ["Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"],
+        ["NPS", f"{meta.get('nps', 0):,}"],
+        ["Dimensiones", str(meta.get("dimensions", []))],
+    ]
+    meta_table = Table(meta_items, colWidths=[40 * mm, usable_width - 40 * mm])
+    meta_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("TEXTCOLOR", (0, 0), (0, -1), C_PRIMARY),
+        ("TEXTCOLOR", (1, 0), (1, -1), C_DARK),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.5, HexColor("#e0e0e0")),
+    ]))
+    story.append(meta_table)
+    story.append(Spacer(1, 8 * mm))
+
+    # Resumen por estructura
+    story.append(Paragraph("Resumen por Estructura", s_heading))
+    resumen_data = [["Estructura", "Vol (cm\u00b3)", "Dmedia (Gy)", "D98 (Gy)", "BED (Gy)"]]
+    for name, s in structures.items():
+        label = struct_labels.get(name, name)
+        resumen_data.append([
+            label,
+            f"{s.get('volume_cm3', 0):.2f}",
+            f"{s.get('mean_dose_gy', 0):.2f}",
+            f"{s.get('d98_gy', 0):.2f}",
+            f"{s.get('bed_gy', 0):.2f}",
+        ])
+    resumen_table = Table(resumen_data, colWidths=[35 * mm] + [(usable_width - 35 * mm) / 4] * 4)
+    resumen_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+    ]
+    # Colores por fila
+    for i, name in enumerate(structures.keys(), start=1):
+        clr = struct_colors_hex.get(name, C_DARK)
+        resumen_style.append(("TEXTCOLOR", (0, i), (0, i), clr))
+        resumen_style.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+    resumen_table.setStyle(TableStyle(resumen_style))
+    story.append(resumen_table)
+
+    story.append(Spacer(1, 10 * mm))
+    story.append(Paragraph(f"Generado: {time.strftime('%Y-%m-%d %H:%M')}", s_small))
+    story.append(PageBreak())
+
+    # ================================================================
+    # PAGINA 2: PARAMETROS RADIOBIOLOGICOS
+    # ================================================================
+    story.append(Paragraph("Parametros Radiobiologicos", s_heading))
+    story.append(Spacer(1, 4 * mm))
+
+    story.append(Paragraph("Parametros del modelo", s_heading3))
+    params_data = [
+        ["Parametro", "Valor"],
+        ["t1/2 Y-90", f"{Y90_HALF_LIFE_H:.1f} h"],
+        ["\u03bb (constante de decaimiento)", f"{LAMDA_DECAY:.4f} h\u207b\u00b9"],
+        ["\u03bc (tasa de reparacion)", f"{MU_REPAIR:.2f} h\u207b\u00b9"],
+        ["T_repair", f"{1/MU_REPAIR:.1f} h"],
+        ["\u03c4 (mean life)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f} s"],
+        ["Conversion MeV \u2192 J", f"{MEV2J:.2e}"],
+        ["K MIRD", "48.98 J\u00b7s"],
+    ]
+    params_table = Table(params_data, colWidths=[70 * mm, usable_width - 70 * mm])
+    params_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+    ]))
+    story.append(params_table)
+    story.append(Spacer(1, 6 * mm))
+
+    # Relaciones alpha/beta
+    story.append(Paragraph("Relaciones \u03b1/\u03b2 por estructura", s_heading3))
+    ab_data = [
+        ["Estructura", "\u03b1/\u03b2 (Gy)", "Tipo"],
+        ["H\u00edgado (idx=90)", f"{ALPHA_BETA_LIVER}", "tejido normal"],
+        ["Tumor (idx=100)", f"{ALPHA_BETA_TUMOR}", "tumor"],
+        ["Peritumoral (idx=200)", f"{ALPHA_BETA_LIVER}", "tejido normal"],
+    ]
+    ab_table = Table(ab_data, colWidths=[50 * mm, 30 * mm, usable_width - 80 * mm])
+    ab_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("TEXTCOLOR", (0, 1), (0, 1), C_HIGADO),
+        ("TEXTCOLOR", (0, 2), (0, 2), C_TUMOR),
+        ("TEXTCOLOR", (0, 3), (0, 3), C_PERITUMORAL),
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+    ]
+    ab_table.setStyle(TableStyle(ab_style))
+    story.append(ab_table)
+    story.append(Spacer(1, 6 * mm))
+
+    # Densidades
+    story.append(Paragraph("Densidades asignadas", s_heading3))
+    dens_data = [
+        ["Estructura", "Densidad (g/cm\u00b3)"],
+        ["H\u00edgado / Tumor / Peritumoral", f"{DENSIDAD_LIVER:.2f}"],
+        ["Body (default)", f"{DENSIDAD_BODY:.1f}"],
+        ["Aire", f"{DENSIDAD_AIR:.3f}"],
+    ]
+    dens_table = Table(dens_data, colWidths=[70 * mm, usable_width - 70 * mm])
+    dens_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+    ]))
+    story.append(dens_table)
+    story.append(Spacer(1, 6 * mm))
+
+    # Formulas
+    story.append(Paragraph("Formulas", s_heading3))
+    formulas = [
+        "BED = D + [\u03bb / ((\u03b1/\u03b2)(\u03bb + \u03bc))] \u00b7 D\u00b2",
+        "EUD = (\u03a3 v\u1d62 \u00b7 D\u1d62\u02b0)^(1/a)",
+        "EQD2 = BED / (1 + 2/(\u03b1/\u03b2))",
+        "D [Gy] = D [MeV/g] \u00d7 1.6\u00d710\u207b\u00b9\u00b3 \u00d7 t\u03c4 \u00d7 Act \u00d7 1000",
+    ]
+    for f in formulas:
+        story.append(Paragraph(f"\u2022 {f}", s_small))
+    story.append(PageBreak())
+
+    # ================================================================
+    # PAGINA 3: RESULTADOS DOSIMETRICOS + MIRD
+    # ================================================================
+    story.append(Paragraph("Resultados Dosimetricos por Estructura", s_heading))
+    story.append(Spacer(1, 4 * mm))
+
+    # Tabla principal
+    res_headers = ["Estructura", "Voxeles", "Vol\n(cm\u00b3)", "Dmedia\n(Gy)",
+                   "D98\n(Gy)", "D70\n(Gy)", "D50\n(Gy)", "BED\n(Gy)",
+                   "EUD\n(Gy)", "EQD2\n(Gy)"]
+    res_data = [res_headers]
+    for name, s in structures.items():
+        label = struct_labels.get(name, name)
+        res_data.append([
+            label,
+            f"{s.get('n_voxels', 0):,}",
+            f"{s.get('volume_cm3', 0):.2f}",
+            f"{s.get('mean_dose_gy', 0):.2f}",
+            f"{s.get('d98_gy', 0):.2f}",
+            f"{s.get('d70_gy', 0):.2f}",
+            f"{s.get('d50_gy', 0):.2f}",
+            f"{s.get('bed_gy', 0):.2f}",
+            f"{s.get('eud_gy', 0):.2f}",
+            f"{s.get('eqd2_gy', 0):.2f}",
+        ])
+    res_col_w = usable_width / 10
+    res_table = Table(res_data, colWidths=[res_col_w] * 10)
+    res_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+    ]
+    for i, name in enumerate(structures.keys(), start=1):
+        clr = struct_colors_hex.get(name, C_DARK)
+        res_style.append(("TEXTCOLOR", (0, i), (0, i), clr))
+        res_style.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+    res_table.setStyle(TableStyle(res_style))
+    story.append(res_table)
+    story.append(Spacer(1, 10 * mm))
+
+    # MIRD Partition Model
+    story.append(Paragraph("MIRD Partition Model", s_heading))
+    mird_data = [
+        ["Parametro", "Valor"],
+        ["Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"],
+        ["H\u00edgado (Dmedia)", f"{mird.get('liver', {}).get('mean_dose_gy', 0):.2f} Gy"],
+        ["Tumor (Dmedia)", f"{mird.get('tumor', {}).get('mean_dose_gy', 0):.2f} Gy"],
+    ]
+    if "pretumor" in mird:
+        mird_data.append(["Peritumoral (Dmedia)",
+                          f"{mird['pretumor'].get('mean_dose_gy', 0):.2f} Gy"])
+    mird_table = Table(mird_data, colWidths=[60 * mm, usable_width - 60 * mm])
+    mird_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+    ]))
+    story.append(mird_table)
+    story.append(PageBreak())
+
+    # ================================================================
+    # PAGINA 4: DVH (matplotlib embebido como imagen)
+    # ================================================================
+    if dvh_curves:
+        story.append(Paragraph("Cumulative Dose Volume Histogram (DVH)", s_heading))
+        story.append(Spacer(1, 4 * mm))
+
+        # Generar DVH con matplotlib y guardar como imagen temporal
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            dvh_colors = {"H\u00edgado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2),
+                          "Peritumoral": (0.8, 0.6, 0.0)}
+
+            fig, ax = plt.subplots(figsize=(7.5, 4.5))
+            for name, d_vals, a_vals in dvh_curves:
+                c = dvh_colors.get(name, (0.5, 0.5, 0.5))
+                ax.plot(d_vals, a_vals, color=c, label=name, linewidth=2)
+            ax.set_xlabel("Dose (Gy)", fontsize=12, fontweight="bold")
+            ax.set_ylabel("Volume (%)", fontsize=12, fontweight="bold")
+            ax.set_title("Cumulative DVH", fontsize=14, fontweight="bold")
+            ax.set_yscale("log")
+            ax.set_ylim(0.1, 200)
+            ax.grid(True, which="both", alpha=0.3)
+            ax.legend(fontsize=11)
+            fig.tight_layout()
+
+            dvh_img_path = os.path.join(output_dir, "_dvh_temp.png")
+            fig.savefig(dvh_img_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+            img = Image(dvh_img_path, width=usable_width, height=usable_width * 0.6)
+            story.append(img)
+            story.append(Spacer(1, 6 * mm))
+
+            # Limpiar imagen temporal
+            try:
+                os.remove(dvh_img_path)
+            except Exception:
+                pass
+        except Exception as e:
+            story.append(Paragraph(f"Error generando DVH: {e}", s_small))
+
+        story.append(PageBreak())
+
+        # ================================================================
+        # PAGINA 5: METRICAS DVH
+        # ================================================================
+        story.append(Paragraph("Metricas DVH por Estructura", s_heading))
+        story.append(Spacer(1, 4 * mm))
+
+        dvh_headers = ["Estructura", "Vol\n(cm\u00b3)", "Dmedia\n(Gy)", "D98\n(Gy)",
+                       "D70\n(Gy)", "D50\n(Gy)", "Max\n(Gy)", "BED\n(Gy)", "EUD\n(Gy)"]
+        dvh_data = [dvh_headers]
+        for name, s in structures.items():
+            label = struct_labels.get(name, name)
+            dvh_data.append([
+                label,
+                f"{s.get('volume_cm3', 0):.2f}",
+                f"{s.get('mean_dose_gy', 0):.2f}",
+                f"{s.get('d98_gy', 0):.2f}",
+                f"{s.get('d70_gy', 0):.2f}",
+                f"{s.get('d50_gy', 0):.2f}",
+                f"{s.get('max_dose_gy', 0):.2f}",
+                f"{s.get('bed_gy', 0):.2f}",
+                f"{s.get('eud_gy', 0):.2f}",
+            ])
+        dvh_col_w = usable_width / 9
+        dvh_table = Table(dvh_data, colWidths=[dvh_col_w] * 9)
+        dvh_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
+            ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 8),
+            ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ]
+        for i, name in enumerate(structures.keys(), start=1):
+            clr = struct_colors_hex.get(name, C_DARK)
+            dvh_style.append(("TEXTCOLOR", (0, i), (0, i), clr))
+            dvh_style.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+        dvh_table.setStyle(TableStyle(dvh_style))
+        story.append(dvh_table)
+
+    logger.info(f"  Reporte PDF: {pdf_path}")
+    doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
+    return pdf_path
+
+
+def _generate_pdf_matplotlib_fallback(
+    results: dict, output_dir: str, dvh_curves: list = None
+) -> str:
+    """Fallback: genera PDF con matplotlib si reportlab no esta disponible."""
+    try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_pdf import PdfPages
-        import matplotlib.ticker as ticker
     except ImportError:
         logger.warning("  matplotlib no disponible para PDF")
         return None
@@ -747,290 +1168,38 @@ def generate_pdf_report(
     structures = results.get("structures", {})
     mird = results.get("mird", {})
 
-    # Colores por estructura
-    struct_colors = {
-        "higado":   (0.2, 0.4, 1.0),
-        "tumor":    (1.0, 0.2, 0.2),
-        "pretumor": (1.0, 1.0, 0.0),
-    }
-    struct_labels = {"higado": "Higado", "tumor": "Tumor", "pretumor": "Pretumor"}
+    struct_labels = {"higado": "Hígado", "tumor": "Tumor", "pretumor": "Peritumoral"}
 
     with PdfPages(pdf_path) as pdf:
-
-        # ---- Pagina 1: Portada ----
-        fig = plt.figure(figsize=(8.27, 11.69))  # A4
-        ax = fig.add_axes([0, 0, 1, 1])
+        # Pagina 1: Portada basica
+        fig, ax = plt.subplots(figsize=(8.27, 11.69))
         ax.axis("off")
-
-        # Fondo oscuro header
-        ax.fill_between([0, 1], 0.65, 1.0, color="#1a237e", alpha=0.9, transform=ax.transAxes)
-        ax.text(0.5, 0.88, "REPORTE DE DOSIMETRIA", fontsize=24, fontweight="bold",
-                color="white", ha="center", va="center", transform=ax.transAxes)
-        ax.text(0.5, 0.80, "3Dosim v3.14 — Dosimetria 3D para Medicina Nuclear",
-                fontsize=12, color="#bbdefb", ha="center", va="center", transform=ax.transAxes)
-
-        # Linea separadora (hlines acepta transform, axhline no)
-        try:
-            ax.hlines(0.62, 0.15, 0.85, color="#1a237e", linewidth=2, transform=ax.transAxes)
-        except Exception:
-            ax.axhline(0.62, 0.15, 0.85, color="#1a237e", linewidth=2)
-
-        # Metadatos
-        x0, y0 = 0.15, 0.55
-        step = 0.035
-        items = [
-            ("Escena", meta.get("scene", "N/A")),
-            ("Archivo MCTAL", meta.get("mctal", "N/A")),
+        ax.text(0.5, 0.9, "REPORTE DE DOSIMETRIA", fontsize=24,
+                fontweight="bold", ha="center", transform=ax.transAxes)
+        ax.text(0.5, 0.85, "3Dosim v3.14", fontsize=12, ha="center",
+                color="#666", transform=ax.transAxes)
+        y0 = 0.7
+        for label, value in [
             ("Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"),
             ("NPS", f"{meta.get('nps', 0):,}"),
-            ("Dimensiones", f"{meta.get('dimensions', [])}"),
-        ]
-        for label, value in items:
-            ax.text(x0, y0, label + ":", fontsize=10, fontweight="bold",
-                    color="#333", transform=ax.transAxes)
-            ax.text(x0 + 0.2, y0, str(value), fontsize=10, color="#555",
-                    transform=ax.transAxes)
-            y0 -= step
-
-        # Resumen rapido
-        try:
-            ax.hlines(y0 - 0.02, 0.15, 0.85, color="#ccc", linewidth=1, transform=ax.transAxes)
-        except Exception:
-            ax.axhline(y0 - 0.02, 0.15, 0.85, color="#ccc", linewidth=1)
-        y0 -= 0.06
-        ax.text(x0, y0, "RESUMEN POR ESTRUCTURA", fontsize=11, fontweight="bold",
-                color="#1a237e", transform=ax.transAxes)
-        y0 -= step
-
-        for name, s in structures.items():
-            label = struct_labels.get(name, name)
-            clr = struct_colors.get(name, (0.5, 0.5, 0.5))
-            ax.text(x0, y0, f"  {label}:", fontsize=9, color=clr,
-                    fontweight="bold", transform=ax.transAxes)
-            ax.text(x0 + 0.25, y0,
-                    f"Dmedia = {s.get('mean_dose_gy', 0):.2f} Gy  |  "
-                    f"D98 = {s.get('d98_gy', 0):.2f} Gy  |  "
-                    f"BED = {s.get('bed_gy', 0):.2f} Gy",
-                    fontsize=8, color="#555", transform=ax.transAxes)
-            y0 -= step
-
-        # Footer
-        y0 -= step
-        ax.text(x0, y0, f"Generado: {time.strftime('%Y-%m-%d %H:%M')}",
-                fontsize=8, color="#999", transform=ax.transAxes)
-
-        pdf.savefig(fig)
-        plt.close(fig)
-
-        # ---- Pagina 2: Parametros radiobiologicos ----
-        fig, ax = plt.subplots(figsize=(8.27, 11.69))
-        ax.axis("off")
-        ax.set_title("PARAMETROS RADIOBIOLOGICOS", fontsize=16, fontweight="bold",
-                      color="#1a237e", pad=20)
-
-        y0 = 0.85
-        step = 0.045
-
-        ax.text(0.1, y0, "Parametros del modelo:", fontsize=12, fontweight="bold",
-                color="#333", transform=ax.transAxes)
-        y0 -= step * 0.5
-
-        params = [
-            (r"$t_{1/2}$ Y-90", f"{Y90_HALF_LIFE_H:.1f} h"),
-            (r"$\lambda$ (constante de decaimiento)", f"{LAMDA_DECAY:.4f} h$^{{-1}}$"),
-            (r"$\mu$ (tasa de reparacion)", f"{MU_REPAIR:.2f} h$^{{-1}}$"),
-            (r"$T_{\mathrm{repair}}$", f"{1/MU_REPAIR:.1f} h"),
-            (r"$\tau$ (mean life)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f} s"),
-            (r"Conversion MeV $\to$ J", f"{MEV2J}"),
-            (r"K MIRD", "48.98 J·s"),
-        ]
-        for label, value in params:
-            ax.text(0.12, y0, label, fontsize=9, color="#333", transform=ax.transAxes)
-            ax.text(0.55, y0, value, fontsize=9, color="#555", transform=ax.transAxes)
-            y0 -= step
-
-        y0 -= step
-        try:
-            ax.hlines(y0 + step * 0.3, 0.1, 0.9, color="#ccc", linewidth=1, transform=ax.transAxes)
-        except Exception:
-            ax.axhline(y0 + step * 0.3, 0.1, 0.9, color="#ccc", linewidth=1)
-
-        ax.text(0.1, y0, r"Relaciones $\alpha / \beta$ por estructura:", fontsize=12,
-                fontweight="bold", color="#333", transform=ax.transAxes)
-        y0 -= step * 0.5
-
-        ab_items = [
-            ("Higado  (indice=90)", f"$\\alpha/\\beta$ = {ALPHA_BETA_LIVER} Gy",
-             "tejido normal", (0.2, 0.4, 1.0)),
-            ("Tumor   (indice=100)", f"$\\alpha/\\beta$ = {ALPHA_BETA_TUMOR} Gy",
-             "tumor", (1.0, 0.2, 0.2)),
-            ("Pretumor (indice=200)", f"$\\alpha/\\beta$ = {ALPHA_BETA_LIVER} Gy",
-             "tejido normal (higado)", (1.0, 1.0, 0.0)),
-        ]
-        for name_str, ab_str, tipo, clr in ab_items:
-            ax.text(0.12, y0, name_str, fontsize=9, color=clr, fontweight="bold",
-                    transform=ax.transAxes)
-            ax.text(0.55, y0, ab_str, fontsize=9, color="#333", transform=ax.transAxes)
-            ax.text(0.78, y0, tipo, fontsize=8, color="#888", transform=ax.transAxes)
-            y0 -= step
-
-        y0 -= step
-        ax.text(0.1, y0, "Densidades asignadas:", fontsize=12,
-                fontweight="bold", color="#333", transform=ax.transAxes)
-        y0 -= step * 0.5
-        dens_items = [
-            ("Higado / Tumor / Pretumor", f"{DENSIDAD_LIVER:.2f} g/cm$^3$"),
-            ("Body (default)", f"{DENSIDAD_BODY:.1f} g/cm$^3$"),
-            ("Aire", f"{DENSIDAD_AIR:.3f} g/cm$^3$"),
-        ]
-        for label, value in dens_items:
-            ax.text(0.12, y0, label, fontsize=9, color="#333", transform=ax.transAxes)
-            ax.text(0.55, y0, value, fontsize=9, color="#555", transform=ax.transAxes)
-            y0 -= step
-
-        y0 -= step
-        ax.text(0.1, y0, "Formulas:", fontsize=12, fontweight="bold",
-                color="#333", transform=ax.transAxes)
-        y0 -= step * 0.5
-        formulas = [
-            r"BED = D + $\frac{\lambda}{(\alpha/\beta)(\lambda + \mu)}$ D$^2$",
-            r"EUD = $(\sum v_i D_i^a)^{1/a}$",
-            r"EQD2 = BED / (1 + 2 / $(\alpha/\beta)$)",
-            r"D [Gy] = D [MeV/g] $\cdot$ 1.6e$^{-13}$ $\cdot$ t$\tau$ $\cdot$ Act $\cdot$ 1000",
-        ]
-        for formula in formulas:
-            ax.text(0.12, y0, formula, fontsize=9, color="#555", transform=ax.transAxes)
-            y0 -= step
-
-        pdf.savefig(fig)
-        plt.close(fig)
-
-        # ---- Pagina 3: Resultados por estructura ----
-        fig, ax = plt.subplots(figsize=(8.27, 11.69))
-        ax.axis("off")
-        ax.set_title("RESULTADOS DOSIMETRICOS POR ESTRUCTURA", fontsize=14,
-                      fontweight="bold", color="#1a237e", pad=20)
-
-        y0 = 0.90
-        # Tabla de resultados
-        headers = ["Estructura", "Voxeles", "Dmedia(Gy)", "D98(Gy)",
-                    "D70(Gy)", "D50(Gy)", "BED(Gy)", "EUD(Gy)", "EQD2(Gy)"]
-        col_widths = [0.16, 0.08, 0.10, 0.09, 0.09, 0.09, 0.10, 0.10, 0.10]
-        x_positions = [0.08]
-        for w in col_widths[:-1]:
-            x_positions.append(x_positions[-1] + w)
-
-        # Encabezados
-        for i, h in enumerate(headers):
-            ax.text(x_positions[i], y0, h, fontsize=8, fontweight="bold",
-                    color="white", transform=ax.transAxes)
-        # Fondo header
-        ax.fill_between([0.05, 0.95], y0 - 0.025, y0 + 0.015,
-                        color="#1a237e", alpha=0.9, transform=ax.transAxes)
-        y0 -= 0.04
-
-        for name, s in structures.items():
-            label = struct_labels.get(name, name)
-            clr = struct_colors.get(name, (0.5, 0.5, 0.5))
-            row_data = [
-                label,
-                f"{s.get('n_voxels', 0):,}",
-                f"{s.get('mean_dose_gy', 0):.2f}",
-                f"{s.get('d98_gy', 0):.2f}",
-                f"{s.get('d70_gy', 0):.2f}",
-                f"{s.get('d50_gy', 0):.2f}",
-                f"{s.get('bed_gy', 0):.2f}",
-                f"{s.get('eud_gy', 0):.2f}",
-                f"{s.get('eqd2_gy', 0):.2f}",
-            ]
-            for i, val in enumerate(row_data):
-                ax.text(x_positions[i], y0, val, fontsize=8, color=clr if i == 0 else "#333",
-                        fontweight="bold" if i == 0 else "normal", transform=ax.transAxes)
-            y0 -= 0.03
-
-        # MIRD section
+        ]:
+            ax.text(0.15, y0, f"{label}: {value}", fontsize=11, transform=ax.transAxes)
+            y0 -= 0.04
         y0 -= 0.03
-        try:
-            ax.hlines(y0 + 0.01, 0.08, 0.92, color="#333", linewidth=1.5, transform=ax.transAxes)
-        except Exception:
-            ax.axhline(y0 + 0.01, 0.08, 0.92, color="#333", linewidth=1.5)
-        y0 -= 0.01
-        ax.text(0.08, y0, "MIRD PARTITION MODEL", fontsize=12, fontweight="bold",
-                color="#1a237e", transform=ax.transAxes)
-        y0 -= 0.035
-
-        mird_items = [
-            ("Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"),
-            ("Higado", f"{mird.get('liver', {}).get('mean_dose_gy', 0):.2f} Gy"),
-            ("Tumor", f"{mird.get('tumor', {}).get('mean_dose_gy', 0):.2f} Gy"),
-        ]
-        if "pretumor" in mird:
-            mird_items.append(
-                ("Pretumor", f"{mird['pretumor'].get('mean_dose_gy', 0):.2f} Gy")
-            )
-        for label, value in mird_items:
-            ax.text(0.12, y0, label + ":", fontsize=9, fontweight="bold",
-                    color="#333", transform=ax.transAxes)
-            ax.text(0.35, y0, value, fontsize=9, color="#555", transform=ax.transAxes)
+        ax.text(0.15, y0, "ESTRUCTURAS:", fontsize=12, fontweight="bold",
+                transform=ax.transAxes)
+        y0 -= 0.04
+        for name, s in structures.items():
+            label = struct_labels.get(name, name)
+            ax.text(0.15, y0,
+                    f"  {label}: Dmedia={s.get('mean_dose_gy',0):.2f} Gy, "
+                    f"BED={s.get('bed_gy',0):.2f} Gy",
+                    fontsize=10, transform=ax.transAxes)
             y0 -= 0.03
-
         pdf.savefig(fig)
         plt.close(fig)
 
-        # ---- Pagina 4: DVH ----
-        if dvh_curves:
-            fig, ax = plt.subplots(figsize=(8.27, 6.0))
-            dvh_colors = {"Higado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2),
-                          "Pretumor": (1.0, 1.0, 0.0)}
-            for name, d_vals, a_vals in dvh_curves:
-                c = dvh_colors.get(name, (0.5, 0.5, 0.5))
-                ax.plot(d_vals, a_vals, color=c, label=name, linewidth=2)
-            ax.set_xlabel("Dose (Gy)", fontsize=12, fontweight="bold")
-            ax.set_ylabel("Volume (%)", fontsize=12, fontweight="bold")
-            ax.set_title("Cumulative Dose Volume Histogram (DVH)", fontsize=14,
-                         fontweight="bold")
-            ax.set_yscale("log")
-            ax.set_ylim(0.1, 200)
-            ax.grid(True, which="both", alpha=0.3)
-            ax.legend(fontsize=11)
-            fig.tight_layout()
-
-            # Agregar tabla de metricas debajo del DVH
-            fig2, ax2 = plt.subplots(figsize=(8.27, 3.5))
-            ax2.axis("off")
-            ax2.set_title("Metricas DVH por estructura", fontsize=12,
-                          fontweight="bold", color="#1a237e", pad=10)
-            y2 = 0.75
-            dvh_headers = ["Estructura", "Dmedia(Gy)", "D98(Gy)", "D70(Gy)",
-                           "D50(Gy)", "Max(Gy)", "BED(Gy)", "EUD(Gy)"]
-            dvh_x = [0.06, 0.18, 0.26, 0.34, 0.42, 0.50, 0.58, 0.66]
-            for i, h in enumerate(dvh_headers):
-                ax2.text(dvh_x[i], y2, h, fontsize=8, fontweight="bold",
-                         color="white", transform=ax2.transAxes)
-            ax2.fill_between([0.03, 0.72], y2 - 0.03, y2 + 0.015,
-                             color="#1a237e", alpha=0.9, transform=ax2.transAxes)
-            y2 -= 0.04
-            for name, s in structures.items():
-                label = struct_labels.get(name, name)
-                clr = struct_colors.get(name, (0.5, 0.5, 0.5))
-                row = [label, f"{s.get('mean_dose_gy', 0):.2f}",
-                       f"{s.get('d98_gy', 0):.2f}", f"{s.get('d70_gy', 0):.2f}",
-                       f"{s.get('d50_gy', 0):.2f}", f"{s.get('max_dose_gy', 0):.2f}",
-                       f"{s.get('bed_gy', 0):.2f}", f"{s.get('eud_gy', 0):.2f}"]
-                for i, val in enumerate(row):
-                    ax2.text(dvh_x[i], y2, val, fontsize=8,
-                             color=clr if i == 0 else "#333",
-                             fontweight="bold" if i == 0 else "normal",
-                             transform=ax2.transAxes)
-                y2 -= 0.03
-
-            pdf.savefig(fig)
-            pdf.savefig(fig2)
-            plt.close(fig)
-            plt.close(fig2)
-
-        logger.info(f"  Reporte PDF: {pdf_path}")
-
+    logger.info(f"  Reporte PDF (fallback matplotlib): {pdf_path}")
     return pdf_path
 
 
@@ -1311,9 +1480,11 @@ def main():
                     f"EUD={bio['eud_gy']:.2f} Gy, "
                     f"EQD2={bio['eqd2_gy']:.2f} Gy")
 
+        volume_cm3 = dvh["n_voxels"] * spacing[0] * spacing[1] * spacing[2] / 1000.0
         results["structures"][name] = {
             "index": idx,
             "n_voxels": dvh["n_voxels"],
+            "volume_cm3": volume_cm3,
             "mean_dose_gy": dvh["mean_dose_gy"],
             "min_dose_gy": dvh["min_dose_gy"],
             "max_dose_gy": dvh["max_dose_gy"],
@@ -1335,7 +1506,7 @@ def main():
     results["mird"] = mird
     logger.info(f"  Hígado: {mird['liver']['mean_dose_gy']:.2f} Gy")
     logger.info(f"  Tumor:  {mird['tumor']['mean_dose_gy']:.2f} Gy")
-    logger.info(f"  Pretumor: {mird['pretumor']['mean_dose_gy']:.2f} Gy")
+    logger.info(f"  Peritumoral: {mird['pretumor']['mean_dose_gy']:.2f} Gy")
 
     # ----------------------------------------------------------------
     # Exportar reporte
@@ -1382,7 +1553,7 @@ def main():
         f.write(f"  Actividad: {activity_gbq:.4f} GBq\n")
         f.write(f"  Higado:    {results['mird']['liver']['mean_dose_gy']:.2f} Gy\n")
         f.write(f"  Tumor:     {results['mird']['tumor']['mean_dose_gy']:.2f} Gy\n")
-        f.write(f"  Pretumor:  {results['mird']['pretumor']['mean_dose_gy']:.2f} Gy\n")
+        f.write(f"  Peritumoral: {results['mird']['pretumor']['mean_dose_gy']:.2f} Gy\n")
 
         t_elapsed = time.time() - t_start
         f.write(f"\n  Tiempo total: {t_elapsed:.1f} s\n")
@@ -1397,8 +1568,8 @@ def main():
     # Recolectar curvas DVH para el PDF desde structures del results
     dvh_curves_for_pdf = []
     dvh_pdf_colors = {"higado": (0.2, 0.4, 1.0), "tumor": (1.0, 0.2, 0.2),
-                      "pretumor": (1.0, 1.0, 0.0)}
-    dvh_pdf_labels = {"higado": "Higado", "tumor": "Tumor", "pretumor": "Pretumor"}
+                      "pretumor": (0.8, 0.6, 0.0)}
+    dvh_pdf_labels = {"higado": "Hígado", "tumor": "Tumor", "pretumor": "Peritumoral"}
     try:
         for name in structures:
             if name not in results["structures"]:
@@ -1496,7 +1667,7 @@ def main():
     _log_consola("PIPELINE DE DOSIMETRIA COMPLETADO")
     _log_consola(f"  Actividad: {activity_gbq:.4f} GBq")
     for name, s in results.get("structures", {}).items():
-        label = {"higado": "Higado", "tumor": "Tumor", "pretumor": "Pretumor"}.get(name, name)
+        label = {"higado": "Hígado", "tumor": "Tumor", "pretumor": "Peritumoral"}.get(name, name)
         _log_consola(f"  {label}: Dmedia={s.get('mean_dose_gy', 0):.2f} Gy, "
                      f"BED={s.get('bed_gy', 0):.2f} Gy")
     _log_consola(f"  PDF: dosimetria_report.pdf")
