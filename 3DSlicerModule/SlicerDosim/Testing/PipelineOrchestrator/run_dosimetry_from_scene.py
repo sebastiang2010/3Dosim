@@ -730,8 +730,8 @@ def generate_pdf_report(
 ) -> str:
     """
     Genera reporte PDF con reportlab (5 paginas):
-      P1: Portada con metadatos y resumen
-      P2: Parametros radiobiologicos
+      P1: Portada con metadatos y resumen ejecutivo
+      P2: Parametros radiobiologicos + formulas
       P3: Resultados dosimetricos por estructura + MIRD
       P4: DVH acumulativo (matplotlib embebido)
       P5: Metricas DVH por estructura
@@ -747,12 +747,12 @@ def generate_pdf_report(
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import mm, cm
-        from reportlab.lib.colors import HexColor, Color, black, white
+        from reportlab.lib.colors import HexColor, Color, black, white, grey
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
         from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
                                          Table, TableStyle, PageBreak, Image,
-                                         KeepTogether)
+                                         KeepTogether, HRFlowable)
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
     except ImportError:
@@ -764,16 +764,20 @@ def generate_pdf_report(
     structures = results.get("structures", {})
     mird = results.get("mird", {})
 
-    # -- Colores --
-    C_PRIMARY = HexColor("#1a237e")
-    C_HEADER_BG = HexColor("#1a237e")
+    # -- Paleta de colores profesional --
+    C_PRIMARY = HexColor("#1B2A4A")       # Azul oscuro elegante
+    C_ACCENT = HexColor("#2E86AB")        # Azul acento
+    C_HEADER_BG = HexColor("#1B2A4A")     # Headers tabla
     C_HEADER_FG = white
-    C_LIGHT_BG = HexColor("#e8eaf6")
-    C_GRAY = HexColor("#666666")
-    C_DARK = HexColor("#333333")
-    C_HIGADO = HexColor("#3366cc")
-    C_TUMOR = HexColor("#cc3333")
-    C_PERITUMORAL = HexColor("#cc9900")
+    C_LIGHT_BG = HexColor("#F0F4F8")      # Fila alterna
+    C_GRAY = HexColor("#6B7280")          # Texto secundario
+    C_DARK = HexColor("#1F2937")          # Texto principal
+    C_HIGADO = HexColor("#2563EB")        # Azul
+    C_TUMOR = HexColor("#DC2626")         # Rojo
+    C_PERITUMORAL = HexColor("#D97706")   # Amber/orange
+    C_BORDER = HexColor("#D1D5DB")        # Bordes suaves
+    C_SUCCESS = HexColor("#059669")       # Verde para OK
+    C_BG_LIGHT = HexColor("#FAFBFC")
 
     struct_colors_hex = {"higado": C_HIGADO, "tumor": C_TUMOR, "pretumor": C_PERITUMORAL}
     struct_labels = {"higado": "Hígado", "tumor": "Tumor", "pretumor": "Peritumoral"}
@@ -781,13 +785,16 @@ def generate_pdf_report(
     # -- Estilos --
     styles = getSampleStyleSheet()
     s_title = ParagraphStyle("Title2", parent=styles["Title"],
-                             fontSize=24, textColor=C_PRIMARY, spaceAfter=6)
+                             fontSize=26, textColor=C_PRIMARY, spaceAfter=4,
+                             fontName="Helvetica-Bold")
     s_subtitle = ParagraphStyle("Sub", parent=styles["Normal"],
-                                fontSize=12, textColor=C_GRAY, alignment=TA_CENTER)
+                                fontSize=11, textColor=C_GRAY, alignment=TA_CENTER)
     s_heading = ParagraphStyle("Head", parent=styles["Heading2"],
-                               fontSize=14, textColor=C_PRIMARY, spaceBefore=12, spaceAfter=6)
+                               fontSize=14, textColor=C_PRIMARY, spaceBefore=14,
+                               spaceAfter=6, fontName="Helvetica-Bold")
     s_heading3 = ParagraphStyle("Head3", parent=styles["Heading3"],
-                                fontSize=12, textColor=C_PRIMARY, spaceBefore=8, spaceAfter=4)
+                                fontSize=11, textColor=C_ACCENT, spaceBefore=10,
+                                spaceAfter=4, fontName="Helvetica-Bold")
     s_normal = ParagraphStyle("Norm", parent=styles["Normal"],
                               fontSize=10, textColor=C_DARK, leading=14)
     s_small = ParagraphStyle("Small", parent=styles["Normal"],
@@ -797,12 +804,26 @@ def generate_pdf_report(
                             fontName="Helvetica-Bold")
 
     def add_footer(canvas_obj, doc):
-        """Footer comun para todas las paginas."""
+        """Footer profesional con linea decorativa."""
         canvas_obj.saveState()
-        canvas_obj.setFont("Helvetica", 8)
-        canvas_obj.setFillColor(HexColor("#999999"))
-        canvas_obj.drawCentredString(A4[0] / 2, 15 * mm,
-                                     f"3Dosim v3.14  |  Pagina {doc.page}")
+        # Linea decorativa superior
+        canvas_obj.setStrokeColor(C_ACCENT)
+        canvas_obj.setLineWidth(0.5)
+        canvas_obj.line(20 * mm, 20 * mm, A4[0] - 20 * mm, 20 * mm)
+        # Texto footer
+        canvas_obj.setFont("Helvetica", 7)
+        canvas_obj.setFillColor(C_GRAY)
+        canvas_obj.drawString(20 * mm, 15 * mm, "3Dosim v3.14 — Dosimetria 3D para Medicina Nuclear")
+        canvas_obj.drawRightString(A4[0] - 20 * mm, 15 * mm,
+                                   f"Pagina {doc.page} de 5")
+        canvas_obj.restoreState()
+
+    def add_header_line(canvas_obj, doc):
+        """Linea decorativa en header de pagina 1."""
+        canvas_obj.saveState()
+        canvas_obj.setStrokeColor(C_ACCENT)
+        canvas_obj.setLineWidth(2)
+        canvas_obj.line(20 * mm, A4[1] - 25 * mm, A4[0] - 20 * mm, A4[1] - 25 * mm)
         canvas_obj.restoreState()
 
     doc = SimpleDocTemplate(
@@ -814,129 +835,181 @@ def generate_pdf_report(
     usable_width = A4[0] - 40 * mm
 
     # ================================================================
-    # PAGINA 1: PORTADA
+    # PAGINA 1: PORTADA EJECUTIVA
     # ================================================================
-    # Header azul
-    header_data = [[""]]
-    header_table = Table(header_data, colWidths=[usable_width], rowHeights=[80])
+    # Header con fondo de color
+    header_data = [["REPORTE DE DOSIMETRIA"]]
+    header_table = Table(header_data, colWidths=[usable_width], rowHeights=[50])
     header_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), C_PRIMARY),
+        ("TEXTCOLOR", (0, 0), (-1, -1), white),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 20),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 20),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
     ]))
     story.append(header_table)
-    story.append(Spacer(1, -60))
-    story.append(Paragraph("REPORTE DE DOSIMETRIA", s_title))
-    story.append(Paragraph("3Dosim v3.14 — Dosimetria 3D para Medicina Nuclear", s_subtitle))
-    story.append(Spacer(1, 20 * mm))
-
-    # Metadatos
-    story.append(Paragraph("Metadatos del Estudio", s_heading))
-    meta_items = [
-        ["Escena", meta.get("scene", "N/A")],
-        ["Archivo MCTAL", meta.get("mctal", "N/A")],
-        ["Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"],
-        ["NPS", f"{meta.get('nps', 0):,}"],
-        ["Dimensiones", str(meta.get("dimensions", []))],
-    ]
-    meta_table = Table(meta_items, colWidths=[40 * mm, usable_width - 40 * mm])
-    meta_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("TEXTCOLOR", (0, 0), (0, -1), C_PRIMARY),
-        ("TEXTCOLOR", (1, 0), (1, -1), C_DARK),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.5, HexColor("#e0e0e0")),
-    ]))
-    story.append(meta_table)
     story.append(Spacer(1, 8 * mm))
 
-    # Resumen por estructura
-    story.append(Paragraph("Resumen por Estructura", s_heading))
-    resumen_data = [["Estructura", "Vol (cm\u00b3)", "Dmedia (Gy)", "D98 (Gy)", "BED (Gy)"]]
-    for name, s in structures.items():
-        label = struct_labels.get(name, name)
+    # Subtitulo
+    story.append(Paragraph("3Dosim v3.14 — Dosimetria 3D para Medicina Nuclear", s_subtitle))
+    story.append(Spacer(1, 2 * mm))
+    story.append(HRFlowable(width="100%", thickness=1, color=C_ACCENT))
+    story.append(Spacer(1, 6 * mm))
+
+    # Metadata compacta en 2 columnas
+    story.append(Paragraph("Informacion del Estudio", s_heading))
+    meta_left = [
+        ["Escena:", meta.get("scene", "N/A").split("/")[-1].split("\\")[-1]],
+        ["MCTAL:", meta.get("mctal", "N/A").split("/")[-1].split("\\")[-1]],
+        ["Actividad:", f"{meta.get('activity_gbq', 0):.4f} GBq"],
+    ]
+    meta_right = [
+        ["NPS:", f"{meta.get('nps', 0):,}"],
+        ["Dimensiones:", str(meta.get("dimensions", []))],
+        ["Generado:", time.strftime("%Y-%m-%d %H:%M")],
+    ]
+    meta_table = Table(
+        [meta_left[i] + meta_right[i] for i in range(3)],
+        colWidths=[25 * mm, 55 * mm, 25 * mm, usable_width - 105 * mm]
+    )
+    meta_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 0), (0, -1), C_PRIMARY),
+        ("TEXTCOLOR", (2, 0), (2, -1), C_PRIMARY),
+        ("TEXTCOLOR", (1, 0), (1, -1), C_DARK),
+        ("TEXTCOLOR", (3, 0), (3, -1), C_DARK),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(meta_table)
+    story.append(Spacer(1, 6 * mm))
+
+    # Resumen ejecutivo por estructura
+    story.append(Paragraph("Resumen Ejecutivo", s_heading))
+    story.append(Spacer(1, 2 * mm))
+
+    # SIEMPRE mostrar las 3 estructuras, incluso con 0 voxels
+    all_struct_order = [("higado", "Hígado", LIVER_INDEX, C_HIGADO),
+                        ("tumor", "Tumor", TUMOR_INDEX, C_TUMOR),
+                        ("pretumor", "Peritumoral", PRETUMOR_INDEX, C_PERITUMORAL)]
+
+    resumen_headers = ["", "Estructura", "Voxeles", "Vol (cm\u00b3)", "Dmedia (Gy)", "BED (Gy)"]
+    resumen_data = [resumen_headers]
+    for key, label, idx, color in all_struct_order:
+        s = structures.get(key, {})
+        n_vox = s.get("n_voxels", 0)
+        vol = s.get("volume_cm3", 0)
+        dmedia = s.get("mean_dose_gy", 0)
+        bed = s.get("bed_gy", 0)
+        # Indicador visual
+        status = "\u2713" if n_vox > 0 else "\u2014"
         resumen_data.append([
+            status,
             label,
-            f"{s.get('volume_cm3', 0):.2f}",
-            f"{s.get('mean_dose_gy', 0):.2f}",
-            f"{s.get('d98_gy', 0):.2f}",
-            f"{s.get('bed_gy', 0):.2f}",
+            f"{n_vox:,}" if n_vox > 0 else "0",
+            f"{vol:.1f}" if vol > 0 else "\u2014",
+            f"{dmedia:.2f}" if n_vox > 0 else "\u2014",
+            f"{bed:.2f}" if n_vox > 0 else "\u2014",
         ])
-    resumen_table = Table(resumen_data, colWidths=[35 * mm] + [(usable_width - 35 * mm) / 4] * 4)
+
+    resumen_col_w = [10 * mm, 30 * mm, 22 * mm, 22 * mm, 24 * mm, usable_width - 108 * mm]
+    resumen_table = Table(resumen_data, colWidths=resumen_col_w)
     resumen_style = [
         ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
         ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
+        # Colores por fila
+        ("TEXTCOLOR", (1, 1), (1, 1), C_HIGADO),
+        ("TEXTCOLOR", (1, 2), (1, 2), C_TUMOR),
+        ("TEXTCOLOR", (1, 3), (1, 3), C_PERITUMORAL),
+        ("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold"),
     ]
-    # Colores por fila
-    for i, name in enumerate(structures.keys(), start=1):
-        clr = struct_colors_hex.get(name, C_DARK)
-        resumen_style.append(("TEXTCOLOR", (0, i), (0, i), clr))
-        resumen_style.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
     resumen_table.setStyle(TableStyle(resumen_style))
     story.append(resumen_table)
 
-    story.append(Spacer(1, 10 * mm))
-    story.append(Paragraph(f"Generado: {time.strftime('%Y-%m-%d %H:%M')}", s_small))
+    # Indicadores
+    story.append(Spacer(1, 4 * mm))
+    n_structs_ok = sum(1 for key, _, _, _ in all_struct_order if key in structures and structures[key].get("n_voxels", 0) > 0)
+    story.append(Paragraph(
+        f"<font color=\"#{C_SUCCESS.hexval()[2:]}\">&#10003;</font> "
+        f"<b>{n_structs_ok}/3 estructuras</b> con datos dosimetricos",
+        s_small
+    ))
     story.append(PageBreak())
 
     # ================================================================
     # PAGINA 2: PARAMETROS RADIOBIOLOGICOS
     # ================================================================
     story.append(Paragraph("Parametros Radiobiologicos", s_heading))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=C_ACCENT))
     story.append(Spacer(1, 4 * mm))
 
-    story.append(Paragraph("Parametros del modelo", s_heading3))
+    # Tabla de constantes
+    story.append(Paragraph("Constantes del Modelo Y-90", s_heading3))
     params_data = [
-        ["Parametro", "Valor"],
-        ["t1/2 Y-90", f"{Y90_HALF_LIFE_H:.1f} h"],
-        ["\u03bb (constante de decaimiento)", f"{LAMDA_DECAY:.4f} h\u207b\u00b9"],
-        ["\u03bc (tasa de reparacion)", f"{MU_REPAIR:.2f} h\u207b\u00b9"],
-        ["T_repair", f"{1/MU_REPAIR:.1f} h"],
-        ["\u03c4 (mean life)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f} s"],
-        ["Conversion MeV \u2192 J", f"{MEV2J:.2e}"],
-        ["K MIRD", "48.98 J\u00b7s"],
+        ["Parametro", "Valor", "Unidad"],
+        ["Vida media (t1/2)", f"{Y90_HALF_LIFE_H:.1f}", "horas"],
+        ["Constante de decaimiento (\u03bb)", f"{LAMDA_DECAY:.4f}", "h\u207b\u00b9"],
+        ["Tasa de reparacion (\u03bc)", f"{MU_REPAIR:.2f}", "h\u207b\u00b9"],
+        ["Tiempo de reparacion (T1/\u03bc)", f"{1/MU_REPAIR:.1f}", "horas"],
+        ["Vida media (\u03c4)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f}", "segundos"],
+        ["Conversion MeV \u2192 J", f"{MEV2J:.2e}", "J/MeV"],
+        ["Constante K (MIRD)", "48.98", "J\u00b7s"],
     ]
-    params_table = Table(params_data, colWidths=[70 * mm, usable_width - 70 * mm])
+    params_table = Table(params_data, colWidths=[55 * mm, 40 * mm, usable_width - 95 * mm])
     params_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
         ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("ALIGN", (2, 0), (2, -1), "LEFT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
     ]))
     story.append(params_table)
     story.append(Spacer(1, 6 * mm))
 
     # Relaciones alpha/beta
-    story.append(Paragraph("Relaciones \u03b1/\u03b2 por estructura", s_heading3))
+    story.append(Paragraph("Relaciones \u03b1/\u03b2 por Estructura", s_heading3))
     ab_data = [
-        ["Estructura", "\u03b1/\u03b2 (Gy)", "Tipo"],
-        ["H\u00edgado (idx=90)", f"{ALPHA_BETA_LIVER}", "tejido normal"],
-        ["Tumor (idx=100)", f"{ALPHA_BETA_TUMOR}", "tumor"],
-        ["Peritumoral (idx=200)", f"{ALPHA_BETA_LIVER}", "tejido normal"],
+        ["Estructura", "\u03b1/\u03b2 (Gy)", "Tipo biologico", "Indice"],
+        ["Hígado", f"{ALPHA_BETA_LIVER:.1f}", "Tejido normal", f"{LIVER_INDEX}"],
+        ["Tumor", f"{ALPHA_BETA_TUMOR:.1f}", "Tumor maligno", f"{TUMOR_INDEX}"],
+        ["Peritumoral", f"{ALPHA_BETA_LIVER:.1f}", "Tejido normal", f"{PRETUMOR_INDEX}"],
     ]
-    ab_table = Table(ab_data, colWidths=[50 * mm, 30 * mm, usable_width - 80 * mm])
+    ab_table = Table(ab_data, colWidths=[30 * mm, 25 * mm, 40 * mm, usable_width - 95 * mm])
     ab_style = [
         ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
         ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (1, -1), "CENTER"),
+        ("ALIGN", (3, 0), (3, -1), "CENTER"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
+        # Colores por estructura
         ("TEXTCOLOR", (0, 1), (0, 1), C_HIGADO),
         ("TEXTCOLOR", (0, 2), (0, 2), C_TUMOR),
         ("TEXTCOLOR", (0, 3), (0, 3), C_PERITUMORAL),
@@ -947,63 +1020,69 @@ def generate_pdf_report(
     story.append(Spacer(1, 6 * mm))
 
     # Densidades
-    story.append(Paragraph("Densidades asignadas", s_heading3))
+    story.append(Paragraph("Densidades Asignadas", s_heading3))
     dens_data = [
-        ["Estructura", "Densidad (g/cm\u00b3)"],
-        ["H\u00edgado / Tumor / Peritumoral", f"{DENSIDAD_LIVER:.2f}"],
-        ["Body (default)", f"{DENSIDAD_BODY:.1f}"],
-        ["Aire", f"{DENSIDAD_AIR:.3f}"],
+        ["Material", "Densidad (g/cm\u00b3)", "Uso"],
+        ["Hígado / Tumor / Peritumoral", f"{DENSIDAD_LIVER:.2f}", "Tejido hepatico"],
+        ["Body (default)", f"{DENSIDAD_BODY:.1f}", "Contorno corporal"],
+        ["Aire", f"{DENSIDAD_AIR:.3f}", "Exterior"],
     ]
-    dens_table = Table(dens_data, colWidths=[70 * mm, usable_width - 70 * mm])
+    dens_table = Table(dens_data, colWidths=[50 * mm, 35 * mm, usable_width - 85 * mm])
     dens_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
         ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (1, -1), "CENTER"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
     ]))
     story.append(dens_table)
     story.append(Spacer(1, 6 * mm))
 
     # Formulas
-    story.append(Paragraph("Formulas", s_heading3))
+    story.append(Paragraph("Formulas de Conversion", s_heading3))
     formulas = [
-        "BED = D + [\u03bb / ((\u03b1/\u03b2)(\u03bb + \u03bc))] \u00b7 D\u00b2",
-        "EUD = (\u03a3 v\u1d62 \u00b7 D\u1d62\u02b0)^(1/a)",
-        "EQD2 = BED / (1 + 2/(\u03b1/\u03b2))",
-        "D [Gy] = D [MeV/g] \u00d7 1.6\u00d710\u207b\u00b9\u00b3 \u00d7 t\u03c4 \u00d7 Act \u00d7 1000",
+        ("<b>BED</b> = D + [\u03bb / ((\u03b1/\u03b2)(\u03bb + \u03bc))] \u00b7 D\u00b2",
+         "Biologically Effective Dose"),
+        ("<b>EUD</b> = (\u03a3 v\u1d62 \u00b7 D\u1d62\u02b0)^(1/a)",
+         "Equivalent Uniform Dose"),
+        ("<b>EQD2</b> = BED / (1 + 2/(\u03b1/\u03b2))",
+         "Equivalent Dose in 2 Gy fractions"),
+        ("<b>D [Gy]</b> = D [MeV/g] \u00d7 1.6\u00d710\u207b\u00b9\u00b3 \u00d7 \u03c4 \u00d7 Act \u00d7 1000",
+         "Conversion MeV/cm\u00b3 a Gy"),
     ]
-    for f in formulas:
-        story.append(Paragraph(f"\u2022 {f}", s_small))
+    for formula, desc in formulas:
+        story.append(Paragraph(f"\u2022 {formula} <font color=\"#{C_GRAY.hexval()[2:]}\">({desc})</font>", s_small))
     story.append(PageBreak())
 
     # ================================================================
     # PAGINA 3: RESULTADOS DOSIMETRICOS + MIRD
     # ================================================================
     story.append(Paragraph("Resultados Dosimetricos por Estructura", s_heading))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=C_ACCENT))
     story.append(Spacer(1, 4 * mm))
 
-    # Tabla principal
-    res_headers = ["Estructura", "Voxeles", "Vol\n(cm\u00b3)", "Dmedia\n(Gy)",
-                   "D98\n(Gy)", "D70\n(Gy)", "D50\n(Gy)", "BED\n(Gy)",
-                   "EUD\n(Gy)", "EQD2\n(Gy)"]
+    # Tabla principal - SIEMPRE 3 filas
+    res_headers = ["Estructura", "Voxeles", "Vol (cm\u00b3)", "Dmedia (Gy)",
+                   "D98 (Gy)", "D70 (Gy)", "D50 (Gy)", "BED (Gy)",
+                   "EUD (Gy)", "EQD2 (Gy)"]
     res_data = [res_headers]
-    for name, s in structures.items():
-        label = struct_labels.get(name, name)
+    for key, label, idx, color in all_struct_order:
+        s = structures.get(key, {})
         res_data.append([
             label,
-            f"{s.get('n_voxels', 0):,}",
-            f"{s.get('volume_cm3', 0):.2f}",
-            f"{s.get('mean_dose_gy', 0):.2f}",
-            f"{s.get('d98_gy', 0):.2f}",
-            f"{s.get('d70_gy', 0):.2f}",
-            f"{s.get('d50_gy', 0):.2f}",
-            f"{s.get('bed_gy', 0):.2f}",
-            f"{s.get('eud_gy', 0):.2f}",
-            f"{s.get('eqd2_gy', 0):.2f}",
+            f"{s.get('n_voxels', 0):,}" if s.get('n_voxels', 0) > 0 else "0",
+            f"{s.get('volume_cm3', 0):.1f}" if s.get('volume_cm3', 0) > 0 else "\u2014",
+            f"{s.get('mean_dose_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+            f"{s.get('d98_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+            f"{s.get('d70_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+            f"{s.get('d50_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+            f"{s.get('bed_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+            f"{s.get('eud_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+            f"{s.get('eqd2_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
         ])
     res_col_w = usable_width / 10
     res_table = Table(res_data, colWidths=[res_col_w] * 10)
@@ -1011,18 +1090,17 @@ def generate_pdf_report(
         ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
         ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 8),
-        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("FONTSIZE", (0, 0), (-1, 0), 7.5),
+        ("FONTSIZE", (0, 1), (-1, -1), 8.5),
         ("ALIGN", (1, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
     ]
-    for i, name in enumerate(structures.keys(), start=1):
-        clr = struct_colors_hex.get(name, C_DARK)
-        res_style.append(("TEXTCOLOR", (0, i), (0, i), clr))
+    for i, (key, label, idx, color) in enumerate(all_struct_order, start=1):
+        res_style.append(("TEXTCOLOR", (0, i), (0, i), color))
         res_style.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
     res_table.setStyle(TableStyle(res_style))
     story.append(res_table)
@@ -1030,28 +1108,48 @@ def generate_pdf_report(
 
     # MIRD Partition Model
     story.append(Paragraph("MIRD Partition Model", s_heading))
-    mird_data = [
-        ["Parametro", "Valor"],
-        ["Actividad", f"{meta.get('activity_gbq', 0):.4f} GBq"],
-        ["H\u00edgado (Dmedia)", f"{mird.get('liver', {}).get('mean_dose_gy', 0):.2f} Gy"],
-        ["Tumor (Dmedia)", f"{mird.get('tumor', {}).get('mean_dose_gy', 0):.2f} Gy"],
-    ]
-    if "pretumor" in mird:
-        mird_data.append(["Peritumoral (Dmedia)",
-                          f"{mird['pretumor'].get('mean_dose_gy', 0):.2f} Gy"])
-    mird_table = Table(mird_data, colWidths=[60 * mm, usable_width - 60 * mm])
-    mird_table.setStyle(TableStyle([
+    story.append(HRFlowable(width="100%", thickness=0.5, color=C_ACCENT))
+    story.append(Spacer(1, 4 * mm))
+
+    # MIRD usa keys: liver, tumor, pretumor
+    mird_key_map = {"higado": "liver", "tumor": "tumor", "pretumor": "pretumor"}
+    mird_headers = ["Estructura", "Dmedia (Gy)", "Indice", "Tipo"]
+    mird_data = [mird_headers]
+    for key, label, idx, color in all_struct_order:
+        mird_key = mird_key_map.get(key, key)
+        dose_val = mird.get(mird_key, {}).get("mean_dose_gy", 0)
+        tipo = "Tumor" if key == "tumor" else "Normal"
+        mird_data.append([
+            label,
+            f"{dose_val:.2f}" if dose_val > 0 else "\u2014",
+            f"{idx}",
+            tipo,
+        ])
+    mird_table = Table(mird_data, colWidths=[35 * mm, 30 * mm, 20 * mm, usable_width - 85 * mm])
+    mird_style = [
         ("BACKGROUND", (0, 0), (-1, 0), C_HEADER_BG),
         ("TEXTCOLOR", (0, 0), (-1, 0), C_HEADER_FG),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (2, -1), "CENTER"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
+        ("TEXTCOLOR", (0, 1), (0, 1), C_HIGADO),
+        ("TEXTCOLOR", (0, 2), (0, 2), C_TUMOR),
+        ("TEXTCOLOR", (0, 3), (0, 3), C_PERITUMORAL),
         ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-    ]))
+    ]
+    mird_table.setStyle(TableStyle(mird_style))
     story.append(mird_table)
+
+    story.append(Spacer(1, 6 * mm))
+    story.append(Paragraph(
+        f"<font color=\"#{C_GRAY.hexval()[2:]}\">Actividad total: "
+        f"{meta.get('activity_gbq', 0):.4f} GBq</font>",
+        s_small
+    ))
     story.append(PageBreak())
 
     # ================================================================
@@ -1059,39 +1157,40 @@ def generate_pdf_report(
     # ================================================================
     if dvh_curves:
         story.append(Paragraph("Cumulative Dose Volume Histogram (DVH)", s_heading))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=C_ACCENT))
         story.append(Spacer(1, 4 * mm))
 
-        # Generar DVH con matplotlib y guardar como imagen temporal
         try:
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
 
-            dvh_colors = {"H\u00edgado": (0.2, 0.4, 1.0), "Tumor": (1.0, 0.2, 0.2),
-                          "Peritumoral": (0.8, 0.6, 0.0)}
+            dvh_colors = {"Hígado": (0.145, 0.388, 0.922), "Tumor": (0.863, 0.149, 0.149),
+                          "Peritumoral": (0.851, 0.467, 0.024)}
 
             fig, ax = plt.subplots(figsize=(7.5, 4.5))
             for name, d_vals, a_vals in dvh_curves:
                 c = dvh_colors.get(name, (0.5, 0.5, 0.5))
-                ax.plot(d_vals, a_vals, color=c, label=name, linewidth=2)
+                ax.plot(d_vals, a_vals, color=c, label=name, linewidth=2.5)
             ax.set_xlabel("Dose (Gy)", fontsize=12, fontweight="bold")
             ax.set_ylabel("Volume (%)", fontsize=12, fontweight="bold")
-            ax.set_title("Cumulative DVH", fontsize=14, fontweight="bold")
+            ax.set_title("Cumulative DVH", fontsize=14, fontweight="bold", pad=10)
             ax.set_yscale("log")
             ax.set_ylim(0.1, 200)
-            ax.grid(True, which="both", alpha=0.3)
-            ax.legend(fontsize=11)
+            ax.grid(True, which="both", alpha=0.3, linestyle="--")
+            ax.legend(fontsize=11, loc="upper right", framealpha=0.9)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
             fig.tight_layout()
 
             dvh_img_path = os.path.join(output_dir, "_dvh_temp.png")
-            fig.savefig(dvh_img_path, dpi=150, bbox_inches="tight")
+            fig.savefig(dvh_img_path, dpi=150, bbox_inches="tight", facecolor="white")
             plt.close(fig)
 
             img = Image(dvh_img_path, width=usable_width, height=usable_width * 0.6)
             story.append(img)
             story.append(Spacer(1, 6 * mm))
 
-            # Limpiar imagen temporal
             try:
                 os.remove(dvh_img_path)
             except Exception:
@@ -1105,23 +1204,24 @@ def generate_pdf_report(
         # PAGINA 5: METRICAS DVH
         # ================================================================
         story.append(Paragraph("Metricas DVH por Estructura", s_heading))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=C_ACCENT))
         story.append(Spacer(1, 4 * mm))
 
-        dvh_headers = ["Estructura", "Vol\n(cm\u00b3)", "Dmedia\n(Gy)", "D98\n(Gy)",
-                       "D70\n(Gy)", "D50\n(Gy)", "Max\n(Gy)", "BED\n(Gy)", "EUD\n(Gy)"]
+        dvh_headers = ["Estructura", "Vol (cm\u00b3)", "Dmedia (Gy)", "D98 (Gy)",
+                       "D70 (Gy)", "D50 (Gy)", "Max (Gy)", "BED (Gy)", "EUD (Gy)"]
         dvh_data = [dvh_headers]
-        for name, s in structures.items():
-            label = struct_labels.get(name, name)
+        for key, label, idx, color in all_struct_order:
+            s = structures.get(key, {})
             dvh_data.append([
                 label,
-                f"{s.get('volume_cm3', 0):.2f}",
-                f"{s.get('mean_dose_gy', 0):.2f}",
-                f"{s.get('d98_gy', 0):.2f}",
-                f"{s.get('d70_gy', 0):.2f}",
-                f"{s.get('d50_gy', 0):.2f}",
-                f"{s.get('max_dose_gy', 0):.2f}",
-                f"{s.get('bed_gy', 0):.2f}",
-                f"{s.get('eud_gy', 0):.2f}",
+                f"{s.get('volume_cm3', 0):.1f}" if s.get('volume_cm3', 0) > 0 else "\u2014",
+                f"{s.get('mean_dose_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+                f"{s.get('d98_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+                f"{s.get('d70_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+                f"{s.get('d50_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+                f"{s.get('max_dose_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+                f"{s.get('bed_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
+                f"{s.get('eud_gy', 0):.2f}" if s.get('n_voxels', 0) > 0 else "\u2014",
             ])
         dvh_col_w = usable_width / 9
         dvh_table = Table(dvh_data, colWidths=[dvh_col_w] * 9)
@@ -1133,14 +1233,13 @@ def generate_pdf_report(
             ("FONTSIZE", (0, 1), (-1, -1), 9),
             ("ALIGN", (1, 0), (-1, -1), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
-            ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#cccccc")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_LIGHT_BG]),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("GRID", (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, C_BG_LIGHT]),
         ]
-        for i, name in enumerate(structures.keys(), start=1):
-            clr = struct_colors_hex.get(name, C_DARK)
-            dvh_style.append(("TEXTCOLOR", (0, i), (0, i), clr))
+        for i, (key, label, idx, color) in enumerate(all_struct_order, start=1):
+            dvh_style.append(("TEXTCOLOR", (0, i), (0, i), color))
             dvh_style.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
         dvh_table.setStyle(TableStyle(dvh_style))
         story.append(dvh_table)
