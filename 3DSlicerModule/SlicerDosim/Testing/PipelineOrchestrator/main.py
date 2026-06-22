@@ -2,13 +2,25 @@
 Entry point del PipelineOrchestrator 3Dosim para 3D Slicer.
 
 Uso desde terminal:
+  # Legacy (pipeline completo original)
   Slicer.exe --python-script main.py --data-dir "C:/ruta/datos"
-  Slicer.exe --python-script main.py --data-dir "C:/ruta/datos" --reset
+
+  # Modulo 1: carga, segmentacion, tumor (sin MCNP)
+  Slicer.exe --python-script main.py --modulo 1 --data-dir "C:/ruta/datos"
+
+  # Modulo 2: generacion MCNP desde escena .mrb (desde Mod1)
+  Slicer.exe --python-script main.py --modulo 2 --scene "C:/ruta/escena.mrb"
+
+  # Modulo 3: analisis dosimetrico (proximamente)
+  Slicer.exe --python-script main.py --modulo 3 --mcnp-output "C:/ruta/output"
 """
 
 import argparse
+import logging
 import os
 import sys
+
+logger = logging.getLogger("3DosimMain")
 
 
 def _add_parent_to_path():
@@ -18,6 +30,88 @@ def _add_parent_to_path():
     if parent not in sys.path:
         sys.path.insert(0, parent)
     return parent
+
+
+def run_mod1(args):
+    """Ejecuta PipelineMod1: carga, segmentacion, tumor (sin MCNP)."""
+    from PipelineOrchestrator.pipeline_mod1 import PipelineMod1
+
+    orchestrator = PipelineMod1(
+        data_dir=args.data_dir,
+        reset=args.reset,
+        mcp_port=args.mcp_port,
+        no_consola=args.no_consola,
+        segmenter=args.segmenter,
+        stop_before_segment=args.stop_before_segment,
+        force_cpu=args.force_cpu,
+    )
+    orchestrator.run()
+
+
+def run_mod2(args):
+    """Ejecuta PipelineMod2: genera MCNP desde escena .mrb de Mod1."""
+    from PipelineOrchestrator.pipeline_mod2 import PipelineMod2
+
+    # Si no se especifico --scene, auto-detectar desde --data-dir
+    scene_path = args.scene
+    if not scene_path and args.data_dir:
+        candidate = os.path.join(
+            os.path.dirname(args.data_dir), "resultados_test", "scenes", "3Dosim_scene.mrb"
+        )
+        if os.path.exists(candidate):
+            scene_path = candidate
+            logger.info(f"  Escena auto-detectada: {scene_path}")
+
+    orchestrator = PipelineMod2(
+        scene_path=scene_path,
+        output_dir=args.output,
+        reset=args.reset,
+        isotope=args.isotope or "Y-90",
+        n_particles=int(args.n_particles) if args.n_particles else int(1e7),
+        flip_rows=args.flip if hasattr(args, 'flip') else True,
+        flip_z=args.flip_z if hasattr(args, 'flip_z') else False,
+        refine_hu=args.refine_hu if hasattr(args, 'refine_hu') else False,
+    )
+    orchestrator.run()
+
+
+def run_mod3(args):
+    """Placeholder para Modulo 3: analisis dosimetrico (proximamente)."""
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info(" MODULO 3 — Analisis dosimetrico")
+    logger.info("=" * 60)
+    logger.info("")
+    logger.info("  El Modulo 3 aun no esta implementado.")
+    logger.info("  Proximamente: lectura de output MCNP, dosis 3D, DVH, NTCP/TCP.")
+    logger.info("")
+    logger.info("  Mientras tanto, puede usar:")
+    logger.info("    --modulo 1  : Carga DICOM + segmentacion + tumor + labelmap")
+    logger.info("    --modulo 2  : Generacion MCNP desde escena .mrb")
+    logger.info("")
+    logger.info("  O ejecutar el pipeline legacy completo (sin --modulo):")
+    logger.info("    Slicer.exe --python-script main.py --data-dir <path>")
+    logger.info("")
+
+
+def run_legacy(args):
+    """Ejecuta el pipeline legacy completo (PipelineTestOrchestrator)."""
+    from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
+
+    orchestrator = PipelineTestOrchestrator(
+        args.data_dir,
+        reset=args.reset,
+        mcp_port=args.mcp_port,
+        no_consola=args.no_consola,
+        segmenter=args.segmenter,
+        stop_before_segment=args.stop_before_segment,
+        force_cpu=args.force_cpu,
+        mcnp_isotope=args.isotope,
+        mcnp_n_particles=int(args.n_particles) if args.n_particles else None,
+        mcnp_refine_hu=args.refine_hu if hasattr(args, 'refine_hu') else False,
+        mcnp_flip_rows=args.flip if hasattr(args, 'flip') else False,
+    )
+    orchestrator.run()
 
 
 def main():
@@ -30,11 +124,23 @@ def main():
     parser = argparse.ArgumentParser(
         description="Pipeline orchestrator para SlicerDosim"
     )
+
+    # ── Seleccion de modulo ──
+    parser.add_argument(
+        "--modulo",
+        type=int,
+        default=None,
+        choices=[1, 2, 3],
+        help="Modulo a ejecutar: 1=carga+segmentacion+tumor, 2=generacion MCNP, "
+             "3=analisis dosimetrico (default: pipeline legacy completo)",
+    )
+
+    # ── Argumentos Mod1 / Legacy ──
     parser.add_argument(
         "--data-dir",
         type=str,
         default=r"C:\MAT\3Dosim\pacientes-\pacientes\Paciente_2",
-        help="Directorio con subdirectorios CT/ y PET/",
+        help="Directorio con subdirectorios CT/ y PET/ (Mod1 y legacy)",
     )
     parser.add_argument(
         "--reset",
@@ -76,6 +182,20 @@ def main():
         dest="force_cpu",
         help="Permite GPU en TotalSegmentator si esta disponible",
     )
+
+    # ── Argumentos Mod2 / Legacy ──
+    parser.add_argument(
+        "--scene",
+        type=str,
+        default=None,
+        help="Ruta al archivo .mrb de escena (Mod2: carga desde Mod1)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Directorio de salida (Mod2: MCNP output)",
+    )
     parser.add_argument(
         "--isotope",
         type=str,
@@ -101,24 +221,27 @@ def main():
         default=False,
         help="Invertir eje Y antes de RLE (compatibilidad MATLAB)",
     )
+    parser.add_argument(
+        "--flip-z",
+        action="store_true",
+        default=False,
+        help="Invertir eje Z",
+    )
     args, _ = parser.parse_known_args()
 
-    from PipelineOrchestrator.pipeline import PipelineTestOrchestrator
-
-    orchestrator = PipelineTestOrchestrator(
-        args.data_dir,
-        reset=args.reset,
-        mcp_port=args.mcp_port,
-        no_consola=args.no_consola,
-        segmenter=args.segmenter,
-        stop_before_segment=args.stop_before_segment,
-        force_cpu=args.force_cpu,
-        mcnp_isotope=args.isotope,
-        mcnp_n_particles=int(args.n_particles) if args.n_particles else None,
-        mcnp_refine_hu=args.refine_hu,
-        mcnp_flip_rows=args.flip,
-    )
-    orchestrator.run()
+    # ── Dispatch por modulo ──
+    if args.modulo == 1:
+        logger.info("  Modo: Modulo 1 — Carga, Segmentacion, Tumor")
+        run_mod1(args)
+    elif args.modulo == 2:
+        logger.info("  Modo: Modulo 2 — Generacion MCNP desde escena")
+        run_mod2(args)
+    elif args.modulo == 3:
+        logger.info("  Modo: Modulo 3 — Analisis dosimetrico")
+        run_mod3(args)
+    else:
+        logger.info("  Modo: Legacy (pipeline completo)")
+        run_legacy(args)
 
 
 if __name__ == "__main__":
