@@ -833,6 +833,7 @@ def generate_pdf_report(
     )
     story = []
     usable_width = A4[0] - 40 * mm
+    formula_images_to_clean = []  # imagenes temporales de formulas LaTeX
 
     # ================================================================
     # PAGINA 1: PORTADA EJECUTIVA
@@ -966,12 +967,12 @@ def generate_pdf_report(
     params_data = [
         ["Parametro", "Valor", "Unidad"],
         ["Vida media (t1/2)", f"{Y90_HALF_LIFE_H:.1f}", "horas"],
-        ["Constante de decaimiento (\u03bb)", f"{LAMDA_DECAY:.4f}", "h\u207b\u00b9"],
-        ["Tasa de reparacion (\u03bc)", f"{MU_REPAIR:.2f}", "h\u207b\u00b9"],
-        ["Tiempo de reparacion (T1/\u03bc)", f"{1/MU_REPAIR:.1f}", "horas"],
-        ["Vida media (\u03c4)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f}", "segundos"],
-        ["Conversion MeV \u2192 J", f"{MEV2J:.2e}", "J/MeV"],
-        ["Constante K (MIRD)", "48.98", "J\u00b7s"],
+        ["Constante de decaimiento (lambda)", f"{LAMDA_DECAY:.4f}", "h^-1"],
+        ["Tasa de reparacion (mu)", f"{MU_REPAIR:.2f}", "h^-1"],
+        ["Tiempo de reparacion (T1/mu)", f"{1/MU_REPAIR:.1f}", "horas"],
+        ["Vida media (tau)", f"{Y90_HALF_LIFE_H * 3600 / np.log(2):.0f}", "segundos"],
+        ["Conversion MeV a J", f"{MEV2J:.2e}", "J/MeV"],
+        ["Constante K (MIRD)", "48.98", "J*s"],
     ]
     params_table = Table(params_data, colWidths=[55 * mm, 40 * mm, usable_width - 95 * mm])
     params_table.setStyle(TableStyle([
@@ -990,9 +991,9 @@ def generate_pdf_report(
     story.append(Spacer(1, 6 * mm))
 
     # Relaciones alpha/beta
-    story.append(Paragraph("Relaciones \u03b1/\u03b2 por Estructura", s_heading3))
+    story.append(Paragraph("Relaciones alpha/beta por Estructura", s_heading3))
     ab_data = [
-        ["Estructura", "\u03b1/\u03b2 (Gy)", "Tipo biologico", "Indice"],
+        ["Estructura", "alpha/beta (Gy)", "Tipo biologico", "Indice"],
         ["Hígado", f"{ALPHA_BETA_LIVER:.1f}", "Tejido normal", f"{LIVER_INDEX}"],
         ["Tumor", f"{ALPHA_BETA_TUMOR:.1f}", "Tumor maligno", f"{TUMOR_INDEX}"],
         ["Peritumoral", f"{ALPHA_BETA_LIVER:.1f}", "Tejido normal", f"{PRETUMOR_INDEX}"],
@@ -1022,7 +1023,7 @@ def generate_pdf_report(
     # Densidades
     story.append(Paragraph("Densidades Asignadas", s_heading3))
     dens_data = [
-        ["Material", "Densidad (g/cm\u00b3)", "Uso"],
+        ["Material", "Densidad (g/cm3)", "Uso"],
         ["Hígado / Tumor / Peritumoral", f"{DENSIDAD_LIVER:.2f}", "Tejido hepatico"],
         ["Body (default)", f"{DENSIDAD_BODY:.1f}", "Contorno corporal"],
         ["Aire", f"{DENSIDAD_AIR:.3f}", "Exterior"],
@@ -1042,20 +1043,80 @@ def generate_pdf_report(
     story.append(dens_table)
     story.append(Spacer(1, 6 * mm))
 
-    # Formulas
+    # Formulas con LaTeX via matplotlib
     story.append(Paragraph("Formulas de Conversion", s_heading3))
-    formulas = [
-        ("<b>BED</b> = D + [\u03bb / ((\u03b1/\u03b2)(\u03bb + \u03bc))] \u00b7 D\u00b2",
+    story.append(Spacer(1, 2 * mm))
+
+    def _render_latex_to_image(latex_str, filepath, dpi=150, fontsize=14):
+        """Renderiza formula LaTeX a imagen PNG usando matplotlib."""
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(usable_width / cm, 1.2))
+        ax.text(0.02, 0.5, f"${latex_str}$", fontsize=fontsize,
+                va="center", ha="left", transform=ax.transAxes)
+        ax.axis("off")
+        fig.savefig(filepath, dpi=dpi, bbox_inches="tight",
+                    pad_inches=0.05, facecolor="white", transparent=False)
+        plt.close(fig)
+
+    formula_defs = [
+        (r"\mathrm{BED} = D + \frac{\lambda}{(\alpha/\beta)(\lambda + \mu)} \cdot D^2",
          "Biologically Effective Dose"),
-        ("<b>EUD</b> = (\u03a3 v\u1d62 \u00b7 D\u1d62\u02b0)^(1/a)",
+        (r"\mathrm{EUD} = \left( \sum_i v_i \cdot D_i^a \right)^{1/a}",
          "Equivalent Uniform Dose"),
-        ("<b>EQD2</b> = BED / (1 + 2/(\u03b1/\u03b2))",
+        (r"\mathrm{EQD2} = \frac{\mathrm{BED}}{1 + \frac{2}{\alpha/\beta}}",
          "Equivalent Dose in 2 Gy fractions"),
-        ("<b>D [Gy]</b> = D [MeV/g] \u00d7 1.6\u00d710\u207b\u00b9\u00b3 \u00d7 \u03c4 \u00d7 Act \u00d7 1000",
+        (r"D\,[\mathrm{Gy}] = D\,[\mathrm{MeV/g}] \times 1.6 \times 10^{-13} \times \tau \times \mathrm{Act} \times 1000",
          "Conversion MeV/cm\u00b3 a Gy"),
     ]
-    for formula, desc in formulas:
-        story.append(Paragraph(f"\u2022 {formula} <font color=\"#{C_GRAY.hexval()[2:]}\">({desc})</font>", s_small))
+
+    formula_images = []
+    for i, (latex, desc) in enumerate(formula_defs):
+        img_path = os.path.join(output_dir, f"_formula_{i}.png")
+        try:
+            _render_latex_to_image(latex, img_path)
+            formula_images.append((img_path, desc))
+            formula_images_to_clean.append(img_path)
+        except Exception as e:
+            # Fallback a texto plano si LaTeX falla
+            story.append(Paragraph(f"\u2022 <b>{desc}</b>: {latex}", s_small))
+
+    # Renderizar formulas como imagenes en tabla 2x2
+    if formula_images:
+        img_w = (usable_width - 5 * mm) / 2
+        img_h = img_w * 0.22
+        for idx in range(0, len(formula_images), 2):
+            row_items = []
+            for j in range(2):
+                if idx + j < len(formula_images):
+                    img_path, desc = formula_images[idx + j]
+                    img_obj = Image(img_path, width=img_w, height=img_h)
+                    row_items.append([img_obj, Paragraph(
+                        f"<font color=\"#{C_GRAY.hexval()[2:]}\"><i>{desc}</i></font>",
+                        ParagraphStyle("FormulaDesc", parent=s_small,
+                                       fontSize=8, alignment=TA_CENTER)
+                    )])
+                else:
+                    row_items.append(["", ""])
+            # Stack each cell vertically
+            cell_left = row_items[0]
+            cell_right = row_items[1] if len(row_items) > 1 else ["", ""]
+            formula_table_data = [
+                [cell_left[0], cell_right[0]],
+                [cell_left[1], cell_right[1]],
+            ]
+            formula_table = Table(formula_table_data, colWidths=[img_w + 5 * mm, img_w + 5 * mm])
+            formula_table.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, C_BORDER),
+            ]))
+            story.append(formula_table)
+            story.append(Spacer(1, 2 * mm))
+
     story.append(PageBreak())
 
     # ================================================================
@@ -1246,6 +1307,14 @@ def generate_pdf_report(
 
     logger.info(f"  Reporte PDF: {pdf_path}")
     doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
+
+    # Limpiar imagenes temporales (despues de build)
+    for img_path in formula_images_to_clean:
+        try:
+            os.remove(img_path)
+        except Exception:
+            pass
+
     return pdf_path
 
 
