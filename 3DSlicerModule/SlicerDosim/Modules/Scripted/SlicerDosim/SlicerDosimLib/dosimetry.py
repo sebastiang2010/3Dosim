@@ -9,6 +9,9 @@ Conversion a Gy — MATLAB cargo_mctal.m (lineas 389-395):
   2. D_MeV/g * 1.6e-13      → D_J/g      (MeV2J)
   3. D_J/g * t * Actividad   → D_J/g totales
   4. * 1000                  → D_J/kg = Gy
+
+Reportes PDF:
+  Usa DosimetryReportGenerator para generar reportes profesionales.
 """
 
 from __future__ import annotations
@@ -22,6 +25,11 @@ try:
     from .mctal_parser import MCTALParser, Y90_MEAN_LIFE_S
 except ImportError:
     from mctal_parser import MCTALParser, Y90_MEAN_LIFE_S
+
+try:
+    from .dosimetry_report import DosimetryReportGenerator
+except ImportError:
+    from dosimetry_report import DosimetryReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -242,3 +250,26 @@ class DoseCalculator:
                 result["tumor_dose_gy"] = target_dose_gy
 
         return result
+
+    def generate_report(
+        self,
+        results: dict,
+        output_dir: str,
+        dvh_curves: Optional[list] = None,
+    ) -> Optional[str]:
+        """
+        Genera reporte PDF con resultados dosimetricos.
+
+        Usa DosimetryReportGenerator para crear un reporte profesional
+        con tablas, graficos y formulas LaTeX.
+
+        Args:
+            results: dict con metadata, structures, mird
+            output_dir: directorio donde guardar el PDF
+            dvh_curves: list of (name, d_vals_array, a_vals_array)
+
+        Returns:
+            ruta al PDF generado, o None si fallo
+        """
+        generator = DosimetryReportGenerator()
+        return generator.generate(results, output_dir, dvh_curves)
