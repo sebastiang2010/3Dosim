@@ -1431,6 +1431,10 @@ def main():
                         help="Mantener Slicer abierto con DVH + consola interactiva")
     parser.add_argument("--no-consola", action="store_true",
                         help="No mostrar consola interactiva (default: mostrar si disponible)")
+    parser.add_argument("--flip", action="store_true", default=True,
+                        help="Aplicar flip Y a dosis MCTAL (default: True, compatibilidad MATLAB)")
+    parser.add_argument("--no-flip", action="store_false", dest="flip",
+                        help="No aplicar flip Y a dosis MCTAL")
 
     args, _ = parser.parse_known_args()
 
@@ -1566,6 +1570,16 @@ def main():
     dose_mev_cm3 = mctal_result["dose_3d"]
     error_3d = mctal_result["uncertainty"]
     _log_consola_ok(f"MCTAL parseado: NPS={mctal_result['nps']:,}")
+
+    # Aplicar flip Y a dosis si se aplico flip a la geometria MCNP
+    # MATLAB: f_flip(D3, flip) invierte eje Y DESPUES de cargar MCTAL
+    # Python: phantom se flippea ANTES de MCNP, pero dose viene sin flip del MCTAL
+    #         Si labelmap es original y dose corresponde a phantom flippeado, necesitamos flip
+    if args.flip:
+        dose_mev_cm3 = dose_mev_cm3[:, ::-1, :].copy()
+        error_3d = error_3d[:, ::-1, :].copy()
+        logger.info("  Flip Y aplicado a dosis MCTAL (compatibilidad MATLAB)")
+        _log_consola("Flip Y aplicado a dosis (compatibilidad MATLAB)")
 
     # ----------------------------------------------------------------
     # Convertir a Gy

@@ -7,8 +7,13 @@
 
 {
     // Directorio donde se guardan las escenas .mrb (snapshots del estado de Slicer)
-    // Se crea automaticamente si no existe.
     "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/scenes",
+
+    // Directorio donde se guardan los screenshots de toda la escena
+    "screenshot_output_dir": "C:/MAT/3Dosim/ai-pipe/screenshots",
+
+    // Directorio donde se exportan imagenes NIfTI / NRRD (labelmaps)
+    "image_output_dir": "C:/MAT/3Dosim/ai-pipe/exports",
 
     // Directorio base de output (contiene screenshots/, mcnp_input/, labelmaps/, etc)
     "output_dir_rel": "C:/MAT/3Dosim/ai-pipe",

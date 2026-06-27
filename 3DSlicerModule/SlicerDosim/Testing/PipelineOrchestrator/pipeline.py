@@ -49,7 +49,7 @@ class PipelineTestOrchestrator:
     STEP_VALIDATE_MCNP   = "validate_mcnp_params"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
-                 no_consola: bool = False, segmenter: str = "simple",
+                 no_consola: bool = False, segmenter: str = "totalsegmentator",
                  stop_before_segment: bool = False, force_cpu: bool = True,
                  mcnp_isotope: str = None, mcnp_n_particles: int = None,
                  mcnp_refine_hu: bool = False, mcnp_flip_rows: bool = False,

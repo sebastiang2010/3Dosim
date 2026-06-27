@@ -40,6 +40,7 @@ class PipelineMod1:
     STEP_LOAD_DICOM    = "load_dicom"
     STEP_SHOW_FUSION   = "show_fusion"
     STEP_ANONYMIZE     = "anonymize"
+    STEP_EXPORT_DICOM_INFO = "export_dicom_info"
     STEP_REMOVE_COUCH  = "remove_couch_air"
     STEP_RESAMPLE_PET  = "resample_pet_to_ct"
     STEP_SEGMENT       = "segment_phantom"
@@ -52,9 +53,11 @@ class PipelineMod1:
     STEP_EXPORT_LABELMAP = "export_labelmap"
 
     def __init__(self, data_dir: str, reset: bool = False, mcp_port: int = 0,
-                 no_consola: bool = False, segmenter: str = "simple",
-                 stop_before_segment: bool = False, force_cpu: bool = True):
+                 no_consola: bool = False, segmenter: str = "totalsegmentator",
+                 stop_before_segment: bool = False, force_cpu: bool = True,
+                 patient_id: str = None):
         self.data_dir = data_dir
+        self.patient_id = patient_id or ""
         self.ct_dir = os.path.join(data_dir, "CT")
         self.pet_dir = os.path.join(data_dir, "PET")
         self.output_dir = os.path.join(data_dir, "..", "resultados_test")
@@ -100,7 +103,17 @@ class PipelineMod1:
             "scene_output_dir",
             os.path.join(self.output_dir, "scenes"),
         )
-        logger.info(f"  Scene output dir: {self.scene_output_dir}")
+        logger.info(f"  Scene output dir:  {self.scene_output_dir}")
+        self.screenshot_output_dir = self.pipeline_config.get(
+            "screenshot_output_dir",
+            os.path.join(self.output_dir, "screenshots"),
+        )
+        logger.info(f"  Screenshot dir:    {self.screenshot_output_dir}")
+        self.image_output_dir = self.pipeline_config.get(
+            "image_output_dir",
+            os.path.join(self.output_dir, "imagenes"),
+        )
+        logger.info(f"  Image output dir:  {self.image_output_dir}")
 
         # Config del tumor
         self.tumor_config = self.pipeline_config.get("tumor", {})
@@ -213,6 +226,11 @@ class PipelineMod1:
             logger.warning("Anonimizacion fallo, continuando...")
         self._save_scene("05_anonymize")
         self.tomar_screenshot("05_anonymize")
+
+        # Exportar metadata DICOM a JSON (despues de anonimizar)
+        if not self._checkpoint_step(self.STEP_EXPORT_DICOM_INFO, "Exportando metadata DICOM a JSON",
+                                      self._export_dicom_info_json):
+            logger.warning("Export de metadata DICOM fallo, continuando...")
 
         # Stop before segment
         if self.stop_before_segment:
@@ -625,25 +643,35 @@ class PipelineMod1:
         if self.consola:
             self.consola.log_error(mensaje)
 
-    def tomar_screenshot(self, nombre, view="3D"):
+    def tomar_screenshot(self, nombre, view="full"):
         try:
             import slicer
             from datetime import datetime
             ts = datetime.now().strftime("%H%M%S")
             filename = f"{ts}_{nombre}.png"
-            filepath = os.path.join(self.output_dir, "screenshots", filename)
+            shot_dir = getattr(self, "screenshot_output_dir", None) or \
+                       os.path.join(self.output_dir, "screenshots")
+            filepath = os.path.join(shot_dir, filename)
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            lm = slicer.app.layoutManager()
-            if not lm:
-                return None
-            view_widget = None
-            if view == "3D":
-                view_widget = lm.threeDWidget(0).threeDView()
+            pixmap = None
+            if view == "full":
+                mw = slicer.util.mainWindow()
+                if mw:
+                    pixmap = mw.grab()
+            elif view == "3D":
+                lm = slicer.app.layoutManager()
+                if lm:
+                    w = lm.threeDWidget(0)
+                    if w:
+                        pixmap = w.threeDView().grab()
             elif view in ("Red", "Yellow", "Green"):
-                view_widget = lm.sliceWidget(view.upper()).sliceView()
-            if not view_widget:
+                lm = slicer.app.layoutManager()
+                if lm:
+                    sw = lm.sliceWidget(view.upper())
+                    if sw:
+                        pixmap = sw.sliceView().grab()
+            if pixmap is None:
                 return None
-            pixmap = view_widget.grab()
             pixmap.save(filepath)
             self.screenshots.append(filepath)
             logger.info(f"  Screenshot: {os.path.basename(filepath)}")
@@ -654,7 +682,7 @@ class PipelineMod1:
 
     def _load_scene_if_needed(self):
         import slicer
-        scene_path = os.path.join(self.scene_output_dir, "3Dosim_scene.mrb")
+        scene_path = os.path.join(self.scene_output_dir, "3Dosim.mrb")
         if not os.path.exists(scene_path):
             return
         checkpoint_keys = [
@@ -724,7 +752,8 @@ class PipelineMod1:
     def _save_scene(self, tag=None):
         try:
             import slicer
-            filename = "3Dosim_scene.mrb"
+            # Una sola escena — se sobrescribe acumulando cada paso
+            filename = "3Dosim.mrb"
             scene_dir = getattr(self, "scene_output_dir", None)
             if not scene_dir:
                 scene_dir = os.path.join(self.output_dir, "scenes")
@@ -869,6 +898,86 @@ class PipelineMod1:
 
     def _anonymize(self):
         anonymize.anonymize(self.ct_node, self.ct_dir, self.pet_dir, self.anon_dir, self.pet_node)
+
+    def _export_dicom_info_json(self):
+        """
+        Extrae metadata DICOM de CT y PET (nombre, ID, fechas, etc.)
+        y la guarda como JSON en exports/ para la base de datos.
+        Similar al info_PET / info_CT del paciente.mat de Matlab.
+        """
+        import json
+        try:
+            import slicer
+        except Exception:
+            logger.warning("slicer no disponible, no se puede exportar metadata DICOM")
+            return
+        info = {"CT": {}, "PET": {}}
+        # Intentar extraer desde la base DICOM de Slicer via atributos de nodo
+        for modality, node, directory in [
+            ("CT", self.ct_node, self.ct_dir),
+            ("PET", self.pet_node, self.pet_dir)
+        ]:
+            if node is None:
+                continue
+            # Obtener UID de serie desde atributos del nodo
+            series_uid = node.GetAttribute("DICOM.seriesInstanceUID") or ""
+            study_uid = node.GetAttribute("DICOM.studyInstanceUID") or ""
+            info[modality]["SeriesInstanceUID"] = series_uid
+            info[modality]["StudyInstanceUID"] = study_uid
+            info[modality]["Modality"] = modality
+            # Nombre del nodo (ya anonimizado por _anonymize)
+            info[modality]["NodeName"] = node.GetName()
+            # Leer tags desde los archivos DICOM originales con pydicom
+            dicom_tags = {}
+            if os.path.isdir(directory):
+                try:
+                    import pydicom
+                    for fname in sorted(os.listdir(directory)):
+                        fpath = os.path.join(directory, fname)
+                        if not os.path.isfile(fpath):
+                            continue
+                        try:
+                            ds = pydicom.dcmread(fpath, stop_before_pixels=True, force=True)
+                            for tag_name in [
+                                "PatientName", "PatientID", "PatientBirthDate",
+                                "PatientSex", "StudyDate", "StudyTime",
+                                "StudyDescription", "StudyInstanceUID",
+                                "SeriesDescription", "SeriesInstanceUID",
+                                "SeriesDate", "SeriesTime",
+                                "Modality", "Manufacturer", "InstitutionName",
+                                "ManufacturerModelName", "DeviceSerialNumber",
+                                "ReferringPhysicianName", "OperatorsName",
+                                "AccessionNumber", "PatientAge", "PatientWeight",
+                                "NumberOfSeriesRelatedInstances",
+                                "Rows", "Columns", "SliceThickness",
+                                "PixelSpacing", "SpacingBetweenSlices",
+                                "RescaleIntercept", "RescaleSlope",
+                            ]:
+                                if hasattr(ds, tag_name) and getattr(ds, tag_name) is not None:
+                                    val = getattr(ds, tag_name)
+                                    if hasattr(val, "repval"):
+                                        val = val.repval
+                                    else:
+                                        val = str(val)
+                                    dicom_tags[tag_name] = val
+                            break  # solo leer el primer archivo de la serie
+                        except Exception:
+                            continue
+                except ImportError:
+                    logger.debug(f"  pydicom no disponible para {modality}, usando solo atributos Slicer")
+                except Exception as e:
+                    logger.debug(f"  Error leyendo DICOM {modality}: {e}")
+            info[modality]["DICOM"] = dicom_tags
+        # Guardar JSON
+        export_dir = getattr(self, "image_output_dir", None)
+        if not export_dir:
+            export_dir = os.path.join(self.output_dir, "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        pid = self.patient_id.strip() or "unknown"
+        json_path = os.path.join(export_dir, f"{pid}_info.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(info, f, indent=2, ensure_ascii=False)
+        logger.info(f"  Metadata DICOM exportada -> {json_path}")
 
     def _resample_pet_to_ct(self):
         try:
@@ -1067,10 +1176,11 @@ class PipelineMod1:
         body_node = getattr(self, 'body_node', None)
         if not seg_node or not ct_node:
             raise RuntimeError("Nodos necesarios no disponibles para exportar labelmap")
-        labelmap_dir = getattr(self, 'labelmap_dir', None)
+        labelmap_dir = getattr(self, 'image_output_dir', None) or \
+                       getattr(self, 'labelmap_dir', None)
         if not labelmap_dir:
-            labelmap_dir = os.path.join(self.output_dir, "labelmaps")
-            self.labelmap_dir = labelmap_dir
+            labelmap_dir = os.path.join(self.output_dir, "exports")
+            self.image_output_dir = labelmap_dir
         os.makedirs(labelmap_dir, exist_ok=True)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         tissue_config_path = os.path.join(
@@ -1130,6 +1240,8 @@ class PipelineMod1:
         registro = {
             "fecha": datetime.now().isoformat(),
             "modulo": "Mod1",
+            "patient_id": self.patient_id,
+            "escena": "3Dosim.mrb",
             "data_dir": self.data_dir,
             "output_dir": self.output_dir,
             "segmenter": self.segmenter,

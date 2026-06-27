@@ -217,7 +217,9 @@ def load_pipeline_config(config_path=None) -> dict:
         )
 
     defaults = {
-        "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
+        "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/scenes",
+        "screenshot_output_dir": "C:/MAT/3Dosim/ai-pipe/screenshots",
+        "image_output_dir": "C:/MAT/3Dosim/ai-pipe/exports",
         "output_dir_rel": "../resultados_test",
         "views": {
             "layout": "ConventionalView",

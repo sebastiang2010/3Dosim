@@ -264,7 +264,7 @@ def load_unified_config(force_reload: bool = False) -> dict:
     # Valores por defecto completos
     defaults = {
         "paths": {
-            "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/imagenes",
+            "scene_output_dir": "C:/MAT/3Dosim/ai-pipe/scenes",
             "mcnp_output_dir": "C:/MAT/3Dosim/ai-pipe/mcnp_input",
             "labelmap_output_dir": "C:/MAT/3Dosim/ai-pipe/labelmaps",
             "results_dir_rel": "../resultados_test",

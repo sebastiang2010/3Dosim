@@ -15,6 +15,8 @@ import time
 from PipelineOrchestrator.checkpoint import CheckpointManager
 from PipelineOrchestrator.utils import logger as base_logger, add_module_path, show_progress
 from PipelineOrchestrator.views import load_pipeline_config
+from PipelineOrchestrator.comandos import ConsolaComandos
+from PipelineOrchestrator import ai_supervisor
 
 logger = logging.getLogger("3DosimMod2")
 
@@ -22,22 +24,64 @@ logger = logging.getLogger("3DosimMod2")
 # Progress helper (barra simple para consola)
 # ──────────────────────────────────────────────────────────
 
-class ProgressBar:
-    """Barra de progreso simple estilo Slicer."""
-    def __init__(self, label="Procesando"):
+class QProgressHelper:
+    """Barra de progreso Qt visible dentro de 3D Slicer.
+
+    Muestra un QProgressDialog real que el usuario puede ver.
+    Fallback a consola si no estamos en Slicer.
+    """
+    def __init__(self, label="Procesando", max_seconds=120, can_cancel=False):
         self.label = label
         self.start = time.time()
+        self._dialog = None
+        self._use_qt = False
+        try:
+            import slicer
+            from qt import QProgressDialog, QApplication
+            self._dialog = QProgressDialog(label, "", 0, 100)
+            self._dialog.setWindowTitle("3Dosim - Modulo 2")
+            self._dialog.setMinimumDuration(0)  # mostrar inmediatamente
+            self._dialog.setCancelButton(None)  # sin boton de cancelar
+            if not can_cancel:
+                self._dialog.setCancelButton(None)
+            self._dialog.show()
+            QApplication.processEvents()
+            self._use_qt = True
+        except ImportError:
+            pass  # fallback a consola
 
-    def update(self, step, total, msg=""):
-        pct = int(step / total * 100) if total else 0
-        bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+    def update(self, pct, msg=""):
+        """Actualiza progreso (pct: 0-100)."""
         elapsed = time.time() - self.start
-        print(f"\r  {self.label}: |{bar}| {pct}%  {msg}  [{elapsed:.0f}s]", end="")
-        if pct >= 100:
-            print()
+        if self._use_qt and self._dialog:
+            self._dialog.setValue(pct)
+            self._dialog.setLabelText(f"{msg}\n{elapsed:.0f}s transcurridos")
+            try:
+                from qt import QApplication
+                QApplication.processEvents()
+            except ImportError:
+                pass
+        else:
+            bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+            print(f"\r  {self.label}: |{bar}| {pct}%  {msg}  [{elapsed:.0f}s]", end="")
+            if pct >= 100:
+                print()
 
     def done(self, msg="Completado"):
-        self.update(100, 100, msg)
+        """Cierra el dialogo de progreso."""
+        elapsed = time.time() - self.start
+        if self._use_qt and self._dialog:
+            self._dialog.setValue(100)
+            self._dialog.setLabelText(f"{msg} ({elapsed:.0f}s)")
+            try:
+                from qt import QApplication
+                QApplication.processEvents()
+            except ImportError:
+                pass
+            self._dialog.close()
+            self._dialog = None
+        else:
+            print(f"  {self.label}: {msg} [{elapsed:.0f}s]")
 
 
 # ──────────────────────────────────────────────────────────
@@ -59,7 +103,8 @@ class PipelineMod2:
     def __init__(self, scene_path=None, output_dir=None, reset=False,
                  isotope="Y-90", n_particles=int(1e7),
                  flip_rows=True, flip_z=False, refine_hu=False,
-                 n_liver_tallies=5, n_tumor_tallies=10):
+                 n_liver_tallies=5, n_tumor_tallies=10,
+                 no_consola=False):
         """
         Args:
             scene_path: Ruta al archivo .mrb (de Mod1). Si None, auto-detecta.
@@ -72,6 +117,7 @@ class PipelineMod2:
             refine_hu: Refinar mapeo HU -> materiales.
             n_liver_tallies: Numero de tallies de higado en FMESH4.
             n_tumor_tallies: Numero de tallies de tumor en FMESH4.
+            no_consola: Si True, deshabilita la consola interactiva.
         """
         # ── Scene path ──
         self.scene_path = scene_path or self._auto_detect_scene()
@@ -105,6 +151,15 @@ class PipelineMod2:
         self.n_tumor_tallies = n_tumor_tallies
         self.mcnp_output_path = None
 
+        # ── Consola interactiva ──
+        self.no_consola = no_consola
+        self.consola = None
+        if not no_consola:
+            try:
+                self.consola = ConsolaComandos(output_dir=self.output_dir)
+            except Exception:
+                self.consola = None
+
         # ── Nodos (se llenan en scan_nodes) ──
         self.ct_node = None
         self.ct_masked_node = None
@@ -129,6 +184,9 @@ class PipelineMod2:
         logger.info(f"  Flip Y:       {flip_rows}")
         logger.info(f"  Flip Z:       {flip_z}")
         logger.info(f"  Reset:        {'SI' if reset else 'NO (retoma checkpoints)'}")
+        logger.info(f"  Consola:      {'SI' if not no_consola else 'NO'}")
+        if not no_consola and self.consola:
+            logger.info(f"  Consola OK")
         logger.info("")
 
     # ==================================================================
@@ -141,9 +199,20 @@ class PipelineMod2:
         logger.info("INICIANDO PIPELINE MODULO 2")
         logger.info("")
 
+        # ── Mostrar consola interactiva ──
+        if self.consola:
+            self.consola.log("=" * 50)
+            self.consola.log(" 3Dosim Mod2 - Generacion MCNP")
+            self.consola.log(" Escribi 'ayuda' para comandos disponibles")
+            self.consola.log("=" * 50)
+            self.consola.log("")
+            self.consola.mostrar()
+        self._log_consola("Iniciando Modulo 2...")
+
         if not self.scene_path or not os.path.exists(self.scene_path):
             logger.error("No hay escena .mrb disponible. Abortando.")
             logger.error("Use --scene <path> o ejecute Mod1 primero.")
+            self._log_consola("ERROR: No hay escena .mrb disponible")
             self._report()
             return
 
@@ -151,24 +220,48 @@ class PipelineMod2:
                                  self._check_slicer):
             add_module_path()
 
-        if not self._checkpoint_step(self.STEP_LOAD_SCENE, "Cargando escena .mrb",
-                                      self._load_scene,
-                                      data_func=lambda: {"scene_path": self.scene_path}):
-            logger.error("Fallo critico al cargar escena. Abortando.")
+        # load_scene SIEMPRE se ejecuta (no checkpointeable)
+        # porque cada sesion de Slicer es fresh y necesita la escena cargada
+        try:
+            self._load_scene()
+            self.results["pasos"].append({
+                "nombre": "Cargando escena .mrb", "ok": True, "tiempo": 0
+            })
+            self._log_consola("Escena cargada exitosamente")
+        except Exception as e:
+            logger.error(f"Fallo critico al cargar escena: {e}. Abortando.")
+            self._log_consola(f"ERROR: Fallo al cargar escena - {e}")
             self._report()
             return
 
-        if not self._checkpoint_step(self.STEP_SCAN_NODES, "Escaneando nodos de la escena",
-                                      self._scan_nodes,
-                                      data_func=lambda: {
-                                          "ct_node": self.ct_node.GetName() if self.ct_node else None,
-                                          "pet_node": self.pet_node.GetName() if self.pet_node else None,
-                                          "seg_node": self.segmentation_node.GetName() if self.segmentation_node else None,
-                                      }):
-            logger.error("Fallo al escanear nodos. Abortando.")
+        # scan_nodes SIEMPRE se ejecuta (es barato y asegura nodos frescos)
+        try:
+            self._scan_nodes()
+            self.results["pasos"].append({
+                "nombre": "Escaneando nodos de la escena", "ok": True, "tiempo": 0
+            })
+            self._log_consola(f"Nodos: CT={self.ct_node.GetName() if self.ct_node else 'N/A'}, "
+                             f"PET={self.pet_node.GetName() if self.pet_node else 'N/A'}, "
+                             f"Seg={self.segmentation_node.GetName() if self.segmentation_node else 'N/A'}")
+        except Exception as e:
+            logger.error(f"Fallo al escanear nodos: {e}. Abortando.")
+            self._log_consola(f"ERROR: Fallo al escanear nodos - {e}")
             self._report()
             return
 
+        # ── VALIDACION PRE-MCNP ──
+        self._log_consola("Verificando prerrequisitos para MCNP...")
+        if not self._checkpoint_step("validate_prereqs", "Validando prerrequisitos MCNP",
+                                      self._validate_prerequisites,
+                                      data_func=lambda: {"validado": True}):
+            logger.error("Prerrequisitos MCNP no satisfechos. Abortando.")
+            self._log_consola("ERROR: Prerrequisitos MCNP no satisfechos. Revise logs.")
+            self._report()
+            return
+        self._log_consola("Prerrequisitos OK")
+
+        # ── GENERACION MCNP ──
+        self._log_consola(f"Generando entrada MCNP (isotopo: {self.isotope})...")
         if not self._checkpoint_step(self.STEP_GENERATE_MCNP, "Generando entrada MCNP",
                                       self._generate_mcnp,
                                       data_func=lambda: {
@@ -178,11 +271,15 @@ class PipelineMod2:
                                           "file_size_kb": os.path.getsize(self.mcnp_output_path) / 1024 if self.mcnp_output_path and os.path.exists(self.mcnp_output_path) else 0,
                                       }):
             logger.error("Generacion MCNP fallida. Abortando.")
+            self._log_consola("ERROR: Generacion MCNP fallida. Revise logs.")
             self._report()
             return
 
         self._save_scene("02_post_mcnp")
+        self._log_consola(f"Archivo MCNP generado: {os.path.basename(self.mcnp_output_path)}")
 
+        # ── VALIDACION MCNP ──
+        self._log_consola("Validando archivo MCNP...")
         if not self._checkpoint_step(self.STEP_VALIDATE_MCNP, "Validando archivo MCNP",
                                       self._validate_mcnp,
                                       data_func=lambda: {
@@ -190,6 +287,10 @@ class PipelineMod2:
                                           "exists": os.path.exists(self.mcnp_output_path) if self.mcnp_output_path else False,
                                       }):
             logger.warning("Validacion MCNP encontro problemas potenciales.")
+            self._log_consola(f"ADVERTENCIA: Validacion MCNP encontro problemas")
+
+        # ── DIALOGO FINAL ──
+        self._show_mcnp_summary_dialog()
 
         # Pipeline Mod2 completado
         logger.info("")
@@ -199,8 +300,9 @@ class PipelineMod2:
         logger.info("    1. Verificar Slicer")
         logger.info("    2. Cargar escena .mrb desde Mod1")
         logger.info("    3. Escanear nodos (CT, PET, Segmentacion)")
-        logger.info("    4. Generar entrada MCNP")
-        logger.info("    5. Validar archivo MCNP generado")
+        logger.info("    4. Validar prerrequisitos MCNP")
+        logger.info("    5. Generar entrada MCNP")
+        logger.info("    6. Validar archivo MCNP generado")
         logger.info("")
         logger.info("  Siguiente paso:")
         logger.info("    Modulo 3: analisis dosimetrico desde output MCNP")
@@ -208,9 +310,9 @@ class PipelineMod2:
 
         ok = self._report()
         if ok:
-            logger.info("Modulo 2 finalizado EXITOSAMENTE")
+            self._log_consola("Modulo 2 finalizado EXITOSAMENTE")
         else:
-            logger.info("Modulo 2 finalizado con ERRORES. Revise el reporte.")
+            self._log_consola("Modulo 2 finalizado con ERRORES. Revise el reporte.")
 
     # ==================================================================
     # CHECKPOINT + HELPERS (mismo patron que PipelineMod1)
@@ -242,6 +344,8 @@ class PipelineMod2:
             data = data_func() if data_func else {}
             self.checkpoint.mark_completed(step_name, data=data)
             show_progress(f"{display_name} completado")
+            self._ai_review_paso(display_name, ok=True, elapsed=elapsed,
+                                 step_name=step_name, data=data)
             return True
         except Exception as e:
             elapsed = time.time() - t0
@@ -251,24 +355,68 @@ class PipelineMod2:
             })
             self.results["errores"].append(f"{display_name}: {e}")
             show_progress(f"FALLO: {display_name}")
+            self._ai_review_paso(display_name, ok=False, elapsed=elapsed,
+                                 step_name=step_name, error=str(e))
             return False
 
+    def _ai_review_paso(self, display_name, ok, elapsed, step_name, data=None, error=None):
+        """Envia el paso completado al AI supervisor para revision."""
+        try:
+            ctx = {
+                "paso": display_name, "ok": ok, "tiempo": elapsed,
+                "datos": data or {}, "errores": [error] if error else [],
+            }
+            nodos_info = {}
+            if self.ct_node:
+                nodos_info["CT"] = self.ct_node.GetName()
+            if self.pet_node:
+                nodos_info["PET"] = self.pet_node.GetName()
+            if self.segmentation_node:
+                nodos_info["Segmentacion"] = self.segmentation_node.GetName()
+            ctx["datos"]["nodos_activos"] = nodos_info
+            ctx["datos"]["isotope"] = self.isotope
+            ctx["datos"]["output_dir"] = self.mcnp_dir
+            ai_supervisor.revisar_paso(ctx, consola=self.consola)
+        except Exception as e:
+            logger.debug(f"AI review no disponible: {e}")
+
     def _restore_step_state(self, step_name, data):
-        """Restaura estado desde checkpoint data."""
+        """Restaura estado desde checkpoint data.
+
+        Soporta dos formatos:
+        - Nuevo: ``{"ct_node_name": "nombre"}`` → ``slicer.util.getNode("nombre")``
+        - Viejo: ``{"ct_node": "nombre"}`` → mismo lookup, para compatibilidad
+
+        NOTA: Si la escena no esta cargada (checkpoint load_scene salteado
+        y Slicer fresh), este metodo fallara silenciosamente y los nodos
+        quedaran en None. Por eso load_scene se ejecuta SIEMPRE (ver run()).
+        """
         if not data:
             return
         import slicer
+        # Mapeo de compatibilidad: keys viejos del checkpoint → attr actual
+        compat_keys = {"seg_node": "segmentation_node"}
         # Restaurar nodos
         for key in ["ct_node", "pet_node", "segmentation_node"]:
             name_key = key + "_name"
+            node_name = None
+            # Nuevo formato: _name suffix
             if name_key in data and data[name_key] is not None:
+                node_name = data[name_key]
+            # Viejo formato 1: key directo con string (ej: "ct_node": "nombre")
+            elif key in data and isinstance(data[key], str) and data[key]:
+                node_name = data[key]
+            # Viejo formato 2: key legacy (ej: "seg_node": "nombre")
+            for old_key, mapped_key in compat_keys.items():
+                if mapped_key == key and old_key in data and isinstance(data[old_key], str) and data[old_key]:
+                    node_name = data[old_key]
+                    break
+            if node_name:
                 try:
-                    node = slicer.util.getNode(data[name_key])
+                    node = slicer.util.getNode(node_name)
                     setattr(self, key, node)
                 except Exception:
                     pass
-            elif key in data and data[key] is not None:
-                setattr(self, key, data[key])
         if self.mcnp_output_path is None and data.get("output_path"):
             self.mcnp_output_path = data["output_path"]
 
@@ -385,6 +533,157 @@ class PipelineMod2:
     # STEP METHODS
     # ==================================================================
 
+    # ==================================================================
+    # LOGGING A CONSOLA
+    # ==================================================================
+
+    def _log_consola(self, mensaje: str):
+        """Envia un mensaje a la consola interactiva (si existe)."""
+        if self.consola:
+            self.consola.log(mensaje)
+
+    def _log_consola_ok(self, mensaje: str):
+        """Envia un mensaje de exito a la consola."""
+        if self.consola:
+            self.consola.log_ok(mensaje)
+
+    def _log_consola_error(self, mensaje: str):
+        """Envia un mensaje de error a la consola."""
+        if self.consola:
+            self.consola.log_error(mensaje)
+
+    # ==================================================================
+    # VALIDACION PRE-MCNP
+    # ==================================================================
+
+    def _validate_prerequisites(self):
+        """Valida que todos los prerrequisitos para generar MCNP esten OK.
+        
+        Si algo falta, lanza RuntimeError con mensaje claro de lo que falla.
+        """
+        import slicer
+        errores = []
+
+        # 1. CT node debe existir y tener datos
+        if self.ct_node is None:
+            errores.append("No se encontro nodo CT en la escena")
+        else:
+            img = self.ct_node.GetImageData()
+            if img is None:
+                errores.append(f"El nodo CT '{self.ct_node.GetName()}' no tiene datos de imagen")
+
+        # 2. Segmentation node debe existir
+        if self.segmentation_node is None:
+            errores.append("No se encontro nodo de segmentacion/labelmap en la escena")
+        else:
+            # Si es labelmap, verificar que tenga datos
+            if hasattr(self.segmentation_node, 'GetImageData'):
+                img = self.segmentation_node.GetImageData()
+                if img is None:
+                    errores.append(f"Nodo '{self.segmentation_node.GetName()}' no tiene datos")
+
+        # 3. Output dir debe ser escribible
+        try:
+            os.makedirs(self.mcnp_dir, exist_ok=True)
+            test_file = os.path.join(self.mcnp_dir, ".write_test")
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+        except Exception as e:
+            errores.append(f"El directorio de salida no es escribible: {e}")
+
+        # 4. MCNPInputGenerator debe ser importable
+        try:
+            from SlicerDosim.SlicerDosimLib import MCNPInputGenerator
+        except ImportError:
+            try:
+                from SlicerDosimLib import MCNPInputGenerator
+            except ImportError as e:
+                errores.append(f"No se pudo importar MCNPInputGenerator: {e}")
+
+        if errores:
+            msg = "PRERREQUISITOS MCNP NO SATISFECHOS:\n"
+            for i, err in enumerate(errores, 1):
+                msg += f"  {i}. {err}\n"
+            logger.error(msg)
+            raise RuntimeError(msg)
+
+        logger.info("  Todos los prerrequisitos MCNP OK:")
+        logger.info(f"    CT:       {self.ct_node.GetName()}")
+        logger.info(f"    Segment:  {self.segmentation_node.GetName()}")
+        logger.info(f"    Output:   {self.mcnp_dir}")
+        logger.info(f"    Generator: importable")
+
+    # ==================================================================
+    # DIALOGO FINAL MCNP
+    # ==================================================================
+
+    def _show_mcnp_summary_dialog(self):
+        """Muestra dialogo NO modal con resumen MCNP y comando de ejecucion."""
+        try:
+            import slicer
+            from qt import QMessageBox
+
+            if not self.mcnp_output_path or not os.path.exists(self.mcnp_output_path):
+                logger.warning("No hay archivo MCNP para mostrar en dialogo")
+                return
+
+            file_size_kb = os.path.getsize(self.mcnp_output_path) / 1024
+            file_name = os.path.basename(self.mcnp_output_path)
+
+            # Construir comando de ejecucion MCNP
+            mcnp_exe = "mcnp5"  # o mcnp6
+            exec_cmd = (
+                f"{mcnp_exe} i={file_name} name=3Dosim."
+            )
+
+            msg_box = QMessageBox(slicer.util.mainWindow())
+            msg_box.setWindowTitle("3Dosim - MCNP Generado")
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setTextFormat(1)  # Qt.RichText
+
+            labelmap_name = self.segmentation_node.GetName() if self.segmentation_node else "N/A"
+            ct_name = self.ct_node.GetName() if self.ct_node else "N/A"
+
+            html = (
+                f"<b>Archivo MCNP generado correctamente</b><br><br>"
+                f"<b>Archivo:</b> {file_name}<br>"
+                f"<b>Ubicacion:</b> {self.mcnp_dir}<br>"
+                f"<b>Tamano:</b> {file_size_kb:.1f} KB<br><br>"
+                f"<b>Isotopo:</b> {self.isotope}<br>"
+                f"<b>Particulas:</b> {self.n_particles:.0e}<br>"
+                f"<b>Flip Y:</b> {'Si' if self.flip_rows else 'No'}<br>"
+                f"<b>Flip Z:</b> {'Si' if self.flip_z else 'No'}<br>"
+                f"<b>Refinar HU:</b> {'Si' if self.refine_hu else 'No'}<br><br>"
+                f"<b>Referencias espaciales:</b><br>"
+                f"&nbsp;&nbsp;CT: {ct_name}<br>"
+                f"&nbsp;&nbsp;Labelmap: {labelmap_name}<br><br>"
+                f"<b>Ejecutar MCNP:</b><br>"
+                f"<code style='background:#f0f0f0; padding:4px 8px; display:block; "
+                f"margin:4px 0; border-radius:4px;'>"
+                f"cd /d {self.mcnp_dir}<br>"
+                f"{exec_cmd}"
+                f"</code>"
+            )
+            msg_box.setText(html)
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            msg_box.setModal(False)
+            msg_box.show()
+            msg_box.raise_()
+            msg_box.activateWindow()
+            logger.info("  Dialogo de resumen MCNP mostrado")
+        except Exception as e:
+            logger.warning(f"No se pudo mostrar dialogo MCNP: {e}")
+            # Fallback: mostrar en log
+            logger.info("  =========== RESUMEN MCNP ===========")
+            logger.info(f"  Archivo: {self.mcnp_output_path}")
+            logger.info(f"  Tamano: {file_size_kb:.1f} KB")
+            logger.info(f"  Isotopo: {self.isotope}")
+            logger.info(f"  Particulas: {self.n_particles:.0e}")
+            logger.info(f"  cd {self.mcnp_dir}")
+            logger.info(f"  mcnp5 i={os.path.basename(self.mcnp_output_path)} name=3Dosim.")
+            logger.info("  ====================================")
+
     def _check_slicer(self):
         """Verifica que estamos dentro de 3D Slicer."""
         try:
@@ -405,17 +704,17 @@ class PipelineMod2:
         logger.info(f"  Escena: {self.scene_path}")
         logger.info(f"  Tamano: {size_mb:.0f} MB")
 
-        pb = ProgressBar("Cargando escena")
-        pb.update(10, 100, "Iniciando...")
+        pb = QProgressHelper("Cargando escena", max_seconds=60)
+        pb.update(10, "Iniciando...")
 
         try:
             slicer.app.processEvents()
-            pb.update(30, 100, "Leyendo archivo MRB...")
+            pb.update(30, "Leyendo archivo MRB...")
             slicer.app.processEvents()
 
             success = slicer.util.loadScene(self.scene_path)
 
-            pb.update(80, 100, "Procesando nodos...")
+            pb.update(80, "Procesando nodos...")
             slicer.app.processEvents()
 
             if not success:
@@ -467,7 +766,16 @@ class PipelineMod2:
 
         # ── Segmentacion ──
         seg_found = None
-        if seg_nodes_list:
+
+        # Prioridad 1: labelmap pre-exportada por Mod1 ("3Dosim_Labelmap")
+        # Ya tiene TODOS los indices correctos (30=Tejido_blando, 50=Pulmon,
+        # 80=Hueso, 90=Higado, 100=Tumor) y NO necesita re-extraccion.
+        preferred_lb = [n for n in lb_nodes if "3Dosim_Labelmap" in n.GetName()]
+        if preferred_lb:
+            seg_found = preferred_lb[0]
+            logger.info(f"  Labelmap dosimetrica: '{seg_found.GetName()}' (preferida)")
+            logger.info(f"    Usando labelmap ya exportada con indices del tissue_config")
+        elif seg_nodes_list:
             ts_candidates = [n for n in seg_nodes_list if "TotalSegmentator" in n.GetName() or "Segmentation" in n.GetName()]
             seg_found = ts_candidates[0] if ts_candidates else seg_nodes_list[0]
             logger.info(f"  Segmentacion: '{seg_found.GetName()}'")
@@ -478,7 +786,7 @@ class PipelineMod2:
             logger.info(f"    Segmentos: {n_segs}")
         elif lb_nodes:
             seg_found = lb_nodes[0]
-            logger.info(f"  Segmentacion (labelmap): '{seg_found.GetName()}'")
+            logger.info(f"  Segmentacion (labelmap fallback): '{seg_found.GetName()}'")
         else:
             raise RuntimeError("No se encontraron nodos de segmentacion en la escena")
 
@@ -486,7 +794,10 @@ class PipelineMod2:
 
     def _generate_mcnp(self):
         """Genera archivo de entrada MCNP usando MCNPInputGenerator."""
-        from SlicerDosimLib import MCNPInputGenerator
+        try:
+            from SlicerDosim.SlicerDosimLib import MCNPInputGenerator
+        except ImportError:
+            from SlicerDosimLib import MCNPInputGenerator
 
         generator = MCNPInputGenerator()
 
@@ -497,8 +808,8 @@ class PipelineMod2:
 
         os.makedirs(self.mcnp_dir, exist_ok=True)
 
-        pb = ProgressBar("Generando MCNP")
-        pb.update(5, 100, "Iniciando...")
+        pb = QProgressHelper("Generando MCNP", max_seconds=180)
+        pb.update(5, "Iniciando...")
 
         input_path = generator.generate(
             ct_volume_node=self.ct_node,
@@ -514,7 +825,7 @@ class PipelineMod2:
             n_tumor_tallies=self.n_tumor_tallies,
         )
 
-        pb.done("Archivo MCNP generado")
+        pb.done(f"Archivo MCNP generado ({os.path.getsize(input_path)/1024:.0f} KB)")
 
         if not os.path.exists(input_path):
             raise RuntimeError(f"El archivo MCNP no fue creado: {input_path}")
@@ -593,10 +904,12 @@ class PipelineMod2:
     @staticmethod
     def _auto_detect_scene():
         """Auto-detecta la escena .mrb mas reciente."""
+        base = r"C:\MAT\3Dosim\ai-pipe\scenes"
         candidates = [
-            "C:/MAT/3Dosim/ai-pipe/scenes/3Dosim_scene.mrb",
-            "C:/MAT/3Dosim/pacientes-/pacientes/resultados_test/scenes/3Dosim_scene.mrb",
-            "C:/MAT/3Dosim/ai-pipe/scenes/3Dosim_mod1_scene.mrb",
+            os.path.join(base, "3Dosim.mrb"),         # nombre actual Mod1
+            os.path.join(base, "3Dosim_mod1_scene.mrb"),
+            os.path.join(base, "3Dosim_scene.mrb"),
+            r"C:\MAT\3Dosim\pacientes-\pacientes\resultados_test\scenes\3Dosim.mrb",
         ]
         newest = None
         newest_time = 0
@@ -606,6 +919,10 @@ class PipelineMod2:
                 if mtime > newest_time:
                     newest = c
                     newest_time = mtime
+        if newest:
+            logger.info(f"  Escena auto-detectada: {newest}")
+        else:
+            logger.warning("  No se pudo auto-detectar escena .mrb")
         return newest
 
 
