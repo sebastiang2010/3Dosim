@@ -83,7 +83,8 @@ SCENE_DEFAULT = r"C:\MAT\3Dosim\ai-pipe\scenes\3Dosim_scene.mrb"
 MCTAL_DEFAULT = r"C:\MAT\3Dosim\corrida-Manu\mctal\mctal.m"
 OUTPUT_DIR_DEFAULT = r"C:\MAT\3Dosim\ai-pipe\resultados_dosimetria"
 AI_PIPE_DIR = r"C:\MAT\3Dosim\ai-pipe"  # para PDF en raiz de ai-pipe
-LABELMAP_DEFAULT = r"C:\MAT\3Dosim\ai-pipe\3Dosim_labelmap.nii"
+# Labelmap siempre desde escena (no hay default externo)
+LABELMAP_DEFAULT = None
 
 # Indices de tejido en el labelmap (universe numbers de MCNP)
 LIVER_INDEX = 90
@@ -1424,7 +1425,7 @@ def main():
     parser.add_argument("--activity", type=float, default=None,
                         help="Actividad en GBq (default: computar del PET)")
     parser.add_argument("--labelmap", default=None,
-                        help=f"Ruta a labelmap NIfTI (default: {LABELMAP_DEFAULT})")
+                        help="Ruta a labelmap NIfTI (opcional: labelmap desde escena .mrb)")
     parser.add_argument("--no-slicer", action="store_true",
                         help="No cargar en Slicer (solo parsear MCTAL)")
     parser.add_argument("--show", action="store_true",
@@ -1510,19 +1511,21 @@ def main():
         _log_consola("Paso 2/10: Buscando nodos (CT, PET, Labelmap)...")
         nodes = find_nodes()
 
-        labelmap_nifti = args.labelmap or LABELMAP_DEFAULT
-        if nodes["labelmap"] is None and os.path.exists(labelmap_nifti):
-            logger.info(f"  Cargando labelmap desde NIfTI: {labelmap_nifti}")
-            labelmap_node = slicer.util.loadVolume(labelmap_nifti)
-            if labelmap_node:
-                nodes["labelmap"] = labelmap_node
-                logger.info(f"  Labelmap cargado: {labelmap_node.GetName()}")
+        if nodes["labelmap"] is None and args.labelmap:
+            if os.path.exists(args.labelmap):
+                logger.info(f"  Cargando labelmap desde NIfTI: {args.labelmap}")
+                labelmap_node = slicer.util.loadVolume(args.labelmap)
+                if labelmap_node:
+                    nodes["labelmap"] = labelmap_node
+                    logger.info(f"  Labelmap cargado: {labelmap_node.GetName()}")
+                else:
+                    logger.warning(f"  No se pudo cargar labelmap: {args.labelmap}")
             else:
-                logger.error("  No se pudo cargar labelmap NIfTI")
+                logger.warning(f"  Labelmap --labelmap no encontrado: {args.labelmap}")
 
         if nodes["labelmap"] is None:
-            logger.error("No se encontro nodo labelmap en la escena ni en NIfTI")
-            return 1
+            logger.warning("No se encontro labelmap en escena. Usando segmentacion si disponible.")
+            # No retornar error — puede funcionar sin labelmap (sin DVH/MIRD)
 
         ct_node = nodes["ct"]
         pet_node = nodes["pet"]
