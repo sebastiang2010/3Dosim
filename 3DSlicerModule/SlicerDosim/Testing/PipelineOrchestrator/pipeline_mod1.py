@@ -13,6 +13,7 @@ import os
 import time
 
 from PipelineOrchestrator.checkpoint import CheckpointManager
+from PipelineOrchestrator.worker import PipelineWorker
 from PipelineOrchestrator import anonymize
 from PipelineOrchestrator import couch_remover
 from PipelineOrchestrator import segmentation
@@ -143,14 +144,22 @@ class PipelineMod1:
         logger.info("")
 
     # ==================================================================
-    # RUN
+    # RUN (blocking — backward compatible)
     # ==================================================================
 
     def run(self):
+        """
+        Ejecuta el pipeline Mod1 de forma BLOQUEANTE.
+        Usa internamente el PipelineWorker para no congelar Slicer,
+        pero se bloquea hasta que todos los pasos terminen.
+
+        Compatible con el entry point main.py existente.
+        """
         logger.info("")
         logger.info("INICIANDO PIPELINE MODULO 1")
         logger.info("")
 
+        # ── Pre-setup (ocurre antes del worker) ──
         if self.consola:
             self.consola.log("=" * 50)
             self.consola.log(" 3Dosim Mod1 - Consola de Comandos")
@@ -166,20 +175,290 @@ class PipelineMod1:
         if getattr(self, 'segmentation_node', None):
             self._show_segmentation_3d(self.segmentation_node)
 
-        if self._checkpoint_step(self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
-                                 self._check_slicer,
-                                 data_func=lambda: {"slicer_version": self._slicer_version()}):
-            add_module_path()
+        # Arrancar MCP server (parte de check_slicer)
+        self._pre_check_slicer()
 
-        if not self._checkpoint_step(self.STEP_LOAD_DICOM, "Cargando imagenes DICOM",
-                                      self._load_dicom,
-                                      data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
-                                                         "pet_node_name": self.pet_node.GetName() if self.pet_node else None,
-                                                         "ct_dir": self.ct_dir, "pet_dir": self.pet_dir}):
-            logger.error("Fallo critico en carga DICOM. Abortando.")
-            self._report()
-            return
+        # Checkpoints que ya estan completos → restaurar estado
+        self._restore_preexisting_checkpoints()
 
+        # ── Construir worker con todos los pasos ──
+        self._build_worker()
+
+        # ── Bloquear hasta que termine ──
+        self._pipeline_ok = False
+        self._pipeline_done = False
+
+        try:
+            from qt import QEventLoop
+
+            self.worker.pipeline_completed.connect(self._on_pipeline_completed_blocking)
+            self.worker.step_error.connect(self._on_step_error_blocking)
+            self.worker.start()
+
+            loop = QEventLoop()
+            # Salir del loop cuando termine o falle
+            self.worker.pipeline_completed.connect(loop.quit)
+            self.worker.step_error.connect(lambda name, err, elapsed: loop.quit())
+            loop.exec_()
+        except ImportError:
+            # No-Qt fallback (tests): polling loop
+            self.worker.start()
+            while self.worker.is_running():
+                import time
+                time.sleep(0.1)
+
+        # Reporte final
+        ok = self._pipeline_ok
+        self._report()
+        if ok:
+            self._log_consola("Modulo 1 finalizado EXITOSAMENTE")
+        else:
+            self._log_consola("Modulo 1 finalizado con ERRORES. Revise el reporte.")
+
+    # ────────────────────────────────────────────────────────────
+    # CALLBACKS PARA run() BLOQUEANTE
+    # ────────────────────────────────────────────────────────────
+
+    def _on_pipeline_completed_blocking(self):
+        self._pipeline_ok = True
+        self._pipeline_done = True
+        if self.stop_before_segment:
+            self._stop_before_segment_handler()
+        else:
+            self._log_mod1_summary()
+
+    def _on_step_error_blocking(self, name, error_msg, elapsed):
+        """Cuando un paso falla en modo bloqueante, registramos y SEGUIMOS
+        si el paso es non-critical (como en el codigo original)."""
+        self._pipeline_ok = False
+
+    # ────────────────────────────────────────────────────────────
+    # RUN ASYNC (non-blocking — para integracion con launcher)
+    # ────────────────────────────────────────────────────────────
+
+    def run_async(self, on_completed=None, on_error=None):
+        """
+        Ejecuta el pipeline Mod1 de forma NO BLOQUEANTE.
+        Los callbacks se invocan cuando el pipeline termina o falla.
+
+        Args:
+            on_completed: callback(success: bool) cuando todos los pasos terminan
+            on_error: callback(step_name: str, error: str) cuando un paso falla
+        """
+        logger.info("")
+        logger.info("INICIANDO PIPELINE MODULO 1 (async)")
+        logger.info("")
+
+        if self.consola:
+            self.consola.log("=" * 50)
+            self.consola.log(" 3Dosim Mod1 - Consola de Comandos")
+            self.consola.log(" Escribi 'ayuda' para comandos disponibles")
+            self.consola.log("=" * 50)
+            self.consola.log("")
+            self.consola.mostrar()
+
+        self._log_consola("Iniciando modulo 1...")
+
+        self._load_scene_if_needed()
+        if getattr(self, 'segmentation_node', None):
+            self._show_segmentation_3d(self.segmentation_node)
+
+        self._pre_check_slicer()
+        self._restore_preexisting_checkpoints()
+        self._build_worker()
+
+        # Callbacks externos
+        if on_completed:
+            self.worker.pipeline_completed.connect(
+                lambda: on_completed(self._pipeline_ok))
+        if on_error:
+            self.worker.step_error.connect(
+                lambda name, err, elapsed: on_error(name, err))
+
+        self._pipeline_ok = False
+        self._pipeline_done = False
+        self.worker.pipeline_completed.connect(self._on_pipeline_completed_blocking)
+        self.worker.start()
+
+        logger.info("  [Async] Pipeline Mod1 iniciado — Slicer responde durante la ejecucion")
+
+    # ────────────────────────────────────────────────────────────
+    # BUILD WORKER — define la lista de pasos
+    # ────────────────────────────────────────────────────────────
+
+    def _build_worker(self):
+        """Construye el PipelineWorker con todos los pasos de Mod1.
+
+        Cada paso es: (step_name, is_heavy, callable)
+        - is_heavy=True → se ejecuta en thread separado con polling
+        - is_heavy=False → se ejecuta en el main thread con processEvents()
+
+        Los pasos que ya estan en checkpoint se saltan automaticamente
+        (el callable chequea el checkpoint antes de ejecutar).
+        """
+        tumor_mode = self.tumor_config.get("mode", "synthetic")
+        mode_labels = {
+            "synthetic": "Tumor sintetico esferico en higado",
+            "load_file": "Cargar tumor desde archivo NIfTI",
+            "manual": "Segmentacion manual del tumor en Slicer",
+        }
+        create_healthy = self.tumor_config.get("create_healthy_liver", True)
+
+        steps = []
+
+        # Paso 1: check_slicer
+        steps.append((self.STEP_CHECK_SLICER, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
+                          self._check_slicer,
+                          data_func=lambda: {"slicer_version": self._slicer_version()},
+                          post_fn=lambda: add_module_path())))
+
+        # Paso 2: load_dicom (CRITICO)
+        steps.append((self.STEP_LOAD_DICOM, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_LOAD_DICOM, "Cargando imagenes DICOM",
+                          self._load_dicom,
+                          data_func=lambda: {
+                              "ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                              "pet_node_name": self.pet_node.GetName() if self.pet_node else None,
+                              "ct_dir": self.ct_dir, "pet_dir": self.pet_dir},
+                          critical=True,  # si falla, aborta
+                          post_fn=lambda: self._post_load_dicom())))
+
+        # Paso 3: remove_couch_air
+        steps.append((self.STEP_REMOVE_COUCH, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
+                          self._remove_couch_air,
+                          data_func=lambda: {
+                              "ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                              "ct_masked_node_name": self.ct_masked_node.GetName() if self.ct_masked_node else None},
+                          post_fn=lambda: self._post_remove_couch())))
+
+        # Paso 4: resample PET (Elastix ~30-60s → HEAVY)
+        steps.append((self.STEP_RESAMPLE_PET, True,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_RESAMPLE_PET, "Re-muestreando PET a geometria CT",
+                          self._resample_pet_to_ct,
+                          data_func=lambda: {"pet_resampled": self.pet_node is not None},
+                          post_fn=lambda: self._post_resample_pet())))
+
+        # Paso 5: show_fusion
+        steps.append((self.STEP_SHOW_FUSION, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_SHOW_FUSION, "Mostrando fusion CT+PET registrada",
+                          self._show_fusion,
+                          post_fn=lambda: self._post_show_fusion())))
+
+        # Paso 6: anonymize
+        steps.append((self.STEP_ANONYMIZE, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_ANONYMIZE, "Anonimizando imagenes",
+                          self._anonymize,
+                          data_func=lambda: {
+                              "ct_node_name": self.ct_node.GetName() if self.ct_node else None,
+                              "pet_node_name": self.pet_node.GetName() if self.pet_node else None},
+                          post_fn=lambda: self._post_anonymize())))
+
+        # Paso 7: export DICOM info
+        steps.append((self.STEP_EXPORT_DICOM_INFO, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_EXPORT_DICOM_INFO, "Exportando metadata DICOM a JSON",
+                          self._export_dicom_info_json)))
+
+        # ── Stop before segment (si aplica) ──
+        # NOTA: La conexion de senales se hace DESPUES de _build_worker,
+        # en run() y run_async(). Si stop_before_segment es True,
+        # el worker solo tiene pasos 1-7 y el handler final mostrara
+        # las instrucciones para segmentacion manual.
+
+        # Paso 8: segment_phantom (TotalSegmentator ∼173s → HEAVY)
+        seg_display = f"Segmentando ({self.segmenter})"
+        steps.append((self.STEP_SEGMENT, True,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_SEGMENT, seg_display,
+                          self._segment,
+                          critical=True,
+                          data_func=lambda: {
+                              "segmentation_node_name": self.segmentation_node.GetName() if self.segmentation_node else None,
+                              "segmenter": self.segmenter},
+                          post_fn=lambda: self._post_segment())))
+
+        # Paso 9: autovalidacion
+        steps.append((self.STEP_VALIDATE_AUTO, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_VALIDATE_AUTO, "Autochequeo de segmentos",
+                          self._validate_segmentation_auto,
+                          data_func=lambda: {"segmenter": self.segmenter})))
+
+        # Paso 10: validacion medica de la segmentacion
+        steps.append((self.STEP_VALIDATE + "_seg", False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_VALIDATE + "_seg", "Validacion medica de la segmentacion",
+                          lambda: self._do_validation(context="segmentacion"),
+                          critical=True,
+                          data_func=lambda: {"validado_por": "medico", "contexto": "segmentacion",
+                                             "timestamp": __import__('datetime').datetime.now().isoformat()},
+                          post_fn=lambda: self._post_validate_seg())))
+
+        # Paso 11: tumor (segun config)
+        step_label = mode_labels.get(tumor_mode, f"Tumor (modo: {tumor_mode})")
+        steps.append((self.STEP_ADD_TUMOR, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_ADD_TUMOR, step_label,
+                          self._add_tumor,
+                          data_func=lambda: {"mode": tumor_mode, "config": self.tumor_config},
+                          post_fn=lambda: self._post_tumor())))
+
+        # Paso 12: higado sano
+        if create_healthy:
+            steps.append((self.STEP_HEALTHY_LIVER, False,
+                          lambda: self._checkpoint_step_wrapper(
+                              self.STEP_HEALTHY_LIVER, "Higado sano (higado - tumor)",
+                              self._create_healthy_liver,
+                              data_func=lambda: {"created": True},
+                              post_fn=lambda: self._post_healthy_liver())))
+
+        # Paso 13: validacion medica del tumor
+        steps.append((self.STEP_VALIDATE_TUMOR, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_VALIDATE_TUMOR, "Validacion medica del tumor",
+                          lambda: self._validate_tumor(context=tumor_mode),
+                          critical=True,
+                          data_func=lambda: {"context": tumor_mode,
+                                             "timestamp": __import__('datetime').datetime.now().isoformat()},
+                          post_fn=lambda: self._post_validate_tumor())))
+
+        # Paso 14: segment_body (TotalSegmentator task=body ∼60s → HEAVY)
+        steps.append((self.STEP_SEGMENT_BODY, True,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_SEGMENT_BODY, "Segmentacion corporal (body)",
+                          self._segment_body,
+                          data_func=lambda: {"task": "body", "fast": True, "force_cpu": True},
+                          post_fn=lambda: self._post_segment_body())))
+
+        # Paso 15: export_labelmap
+        steps.append((self.STEP_EXPORT_LABELMAP, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_EXPORT_LABELMAP, "Exportar labelmap dosimetrica",
+                          self._export_labelmap,
+                          data_func=lambda: {"output_dir": self.labelmap_dir},
+                          post_fn=lambda: self._post_export_labelmap())))
+
+        self.worker = PipelineWorker(steps)
+
+        # ── Conectar señales ──
+        self.worker.step_completed.connect(self._on_worker_step_completed)
+        self.worker.step_error.connect(self._on_worker_step_error)
+        self.worker.blocking_started.connect(self._on_worker_blocking_started)
+        self.worker.pipeline_completed.connect(self._on_worker_pipeline_completed)
+
+    # ────────────────────────────────────────────────────────────
+    # POST-STEP HANDLERS (reemplazan el codigo inline en run())
+    # ────────────────────────────────────────────────────────────
+
+    def _post_load_dicom(self):
         self._save_scene("01_post_load_dicom")
         self.tomar_screenshot("01_carga_dicom")
         setup_medical_views(
@@ -190,19 +469,11 @@ class PipelineMod1:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
-        if not self._checkpoint_step(self.STEP_REMOVE_COUCH, "Eliminando camilla y aire",
-                                      self._remove_couch_air,
-                                      data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
-                                                         "ct_masked_node_name": self.ct_masked_node.GetName() if self.ct_masked_node else None}):
-            logger.warning("No se pudo eliminar camilla, continuando...")
+    def _post_remove_couch(self):
         self._save_scene("02_remove_couch")
         self.tomar_screenshot("02_remove_couch")
 
-        # Resample PET
-        if not self._checkpoint_step(self.STEP_RESAMPLE_PET, "Re-muestreando PET a geometria CT",
-                                      self._resample_pet_to_ct,
-                                      data_func=lambda: {"pet_resampled": self.pet_node is not None}):
-            logger.warning("Re-muestreo PET fallo, continuando con PET original...")
+    def _post_resample_pet(self):
         self._save_scene("03_pet_resampled")
         self.tomar_screenshot("03_pet_resampled")
         setup_medical_views(
@@ -213,46 +484,77 @@ class PipelineMod1:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
-        if not self._checkpoint_step(self.STEP_SHOW_FUSION, "Mostrando fusion CT+PET registrada",
-                                      self._show_fusion):
-            logger.warning("No se pudo mostrar fusion, continuando de todos modos")
+    def _show_pet_info(self):
+        """Muestra mensaje no-modal con info del PET (dimensiones, espaciado, actividad)."""
+        if not self.pet_node:
+            return
+        import slicer
+        import numpy as np
+        try:
+            dims = self.pet_node.GetImageData().GetDimensions()
+            spacing = self.pet_node.GetSpacing()
+            n_voxels = dims[0] * dims[1] * dims[2]
+            voxel_vol_ml = (spacing[0] * spacing[1] * spacing[2]) / 1000.0
+            arr = slicer.util.arrayFromVolume(self.pet_node)  # (nz, ny, nx)
+            total_pet = float(np.sum(arr[arr > 0]))
+            total_pet_all = float(np.sum(arr))
+            # Estimar actividad total
+            if total_pet_all < 1e8:
+                activity_bq = total_pet_all * voxel_vol_ml
+                pet_unit = "Bq/ml"
+            else:
+                activity_bq = total_pet_all
+                pet_unit = "Bq"
+            activity_mbq = activity_bq / 1e6
+            activity_gbq = activity_bq / 1e9
+            mean_suv = float(np.mean(arr[arr > 0])) if np.any(arr > 0) else 0
+            max_suv = float(np.max(arr))
+            lines = [
+                f"Dimensiones: {dims[0]} x {dims[1]} x {dims[2]}",
+                f"Espaciado: {spacing[0]:.3f} x {spacing[1]:.3f} x {spacing[2]:.3f} mm",
+                f"Voxeles totales: {n_voxels}",
+                f"Volumen voxel: {voxel_vol_ml:.6f} ml",
+                "",
+                f"PET unidades: {pet_unit}",
+                f"Suma total PET: {total_pet_all:.2e}",
+                f"Media SUV (>0): {mean_suv:.2f}",
+                f"SUV maximo: {max_suv:.2f}",
+                "",
+                f"Actividad estimada: {activity_bq:.2e} Bq",
+                f"  = {activity_mbq:.2f} MBq",
+                f"  = {activity_gbq:.4f} GBq",
+            ]
+            msg = "\n".join(lines)
+            logger.info("=== Informacion del PET ===\n" + msg)
+            qt_mod = slicer.util.loadQtGuiModule()
+            if qt_mod:
+                from qt import QMessageBox
+                mb = QMessageBox(
+                    QMessageBox.Information,
+                    "Informacion del PET",
+                    msg,
+                    QMessageBox.Ok,
+                )
+                mb.setDetailedText(
+                    f"Actividad calculada como suma de voxeles PET.\n"
+                    f"PET unit = {pet_unit}, vol_voxel = {voxel_vol_ml:.6f} ml\n"
+                    f"(Los valores de actividad son estimaciones)"
+                )
+                mb.setModal(False)
+                mb.show()
+        except Exception as e:
+            logger.warning(f"No se pudo mostrar info PET: {e}")
+
+    def _post_show_fusion(self):
+        self._show_pet_info()
         self._save_scene("04_fusion_ct_pet_registrada")
         self.tomar_screenshot("04_fusion_ct_pet_registrada")
 
-        if not self._checkpoint_step(self.STEP_ANONYMIZE, "Anonimizando imagenes",
-                                      self._anonymize,
-                                      data_func=lambda: {"ct_node_name": self.ct_node.GetName() if self.ct_node else None,
-                                                         "pet_node_name": self.pet_node.GetName() if self.pet_node else None}):
-            logger.warning("Anonimizacion fallo, continuando...")
+    def _post_anonymize(self):
         self._save_scene("05_anonymize")
         self.tomar_screenshot("05_anonymize")
 
-        # Exportar metadata DICOM a JSON (despues de anonimizar)
-        if not self._checkpoint_step(self.STEP_EXPORT_DICOM_INFO, "Exportando metadata DICOM a JSON",
-                                      self._export_dicom_info_json):
-            logger.warning("Export de metadata DICOM fallo, continuando...")
-
-        # Stop before segment
-        if self.stop_before_segment:
-            self._stop_before_segment_handler()
-            return
-
-        # Segmentacion
-        seg_display = f"Segmentando ({self.segmenter})"
-        if self.segmenter == "totalsegmentator":
-            self._log_consola("Iniciando TotalSegmentator modo rapido (5-15 min)")
-        else:
-            self._log_consola("Iniciando segmentacion simple (threshold + morfologia)")
-        seg_ok = self._checkpoint_step(self.STEP_SEGMENT, seg_display,
-                                       self._segment,
-                                       data_func=lambda: {"segmentation_node_name": self.segmentation_node.GetName() if self.segmentation_node else None,
-                                                          "segmenter": self.segmenter})
-        if not seg_ok:
-            logger.error("SEGMENTACION FALLIDA. El pipeline no puede continuar.")
-            self._log_consola("ERROR: Segmentacion fallida. Pipeline detenido.")
-            self._report()
-            return
-
+    def _post_segment(self):
         self._save_scene("08_segmentacion")
         self.tomar_screenshot("08_segmentacion")
         setup_medical_views(
@@ -264,26 +566,7 @@ class PipelineMod1:
         )
         self._show_segmentation_3d(self.segmentation_node)
 
-        # Autovalidacion
-        if not self._checkpoint_step(self.STEP_VALIDATE_AUTO, "Autochequeo de segmentos",
-                                      self._validate_segmentation_auto,
-                                      data_func=lambda: {"segmenter": self.segmenter}):
-            if self.segmenter == "simple":
-                logger.warning("Segmentacion SIMPLE solo genera mascara corporal.")
-            else:
-                logger.warning("Autovalidacion: faltan segmentos esperados.")
-
-        # Validacion medica
-        self._log_consola("Esperando validacion medica de la segmentacion...")
-        if not self._checkpoint_step(self.STEP_VALIDATE + "_seg", "Validacion medica de la segmentacion",
-                                      lambda: self._do_validation(context="segmentacion"),
-                                      data_func=lambda: {"validado_por": "medico", "contexto": "segmentacion",
-                                                         "timestamp": __import__('datetime').datetime.now().isoformat()}):
-            logger.error("Validacion medica rechazada. Pipeline detenido.")
-            self._log_consola("Validacion medica RECHAZADA. Pipeline detenido.")
-            self._report()
-            return
-
+    def _post_validate_seg(self):
         self._save_scene("08_post_validacion_segmentacion")
         self.tomar_screenshot("08_validacion_segmentacion")
         setup_medical_views(
@@ -294,19 +577,8 @@ class PipelineMod1:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
-        # Tumor (segun config)
+    def _post_tumor(self):
         tumor_mode = self.tumor_config.get("mode", "synthetic")
-        mode_labels = {
-            "synthetic": "Tumor sintetico esferico en higado",
-            "load_file": "Cargar tumor desde archivo NIfTI",
-            "manual": "Segmentacion manual del tumor en Slicer",
-        }
-        step_label = mode_labels.get(tumor_mode, f"Tumor (modo: {tumor_mode})")
-        self._log_consola(f"Creando tumor (modo: {tumor_mode})...")
-        if not self._checkpoint_step(self.STEP_ADD_TUMOR, step_label,
-                                      self._add_tumor,
-                                      data_func=lambda: {"mode": tumor_mode, "config": self.tumor_config}):
-            logger.warning(f"Creacion de tumor (modo={tumor_mode}) fallo, continuando...")
         scene_tag = {"synthetic": "09_tumor_sintetico", "load_file": "09_tumor_cargado",
                      "manual": "09_tumor_manual"}.get(tumor_mode, "09_tumor")
         self._save_scene(scene_tag)
@@ -319,49 +591,48 @@ class PipelineMod1:
             link_slices=self.pipeline_config.get("views", {}).get("link_slices", True),
         )
 
-        # Higado sano
-        create_healthy = self.tumor_config.get("create_healthy_liver", True)
-        if create_healthy:
-            self._log_consola("Verificando higado sano = higado - tumor...")
-            if not self._checkpoint_step(self.STEP_HEALTHY_LIVER, "Higado sano (higado - tumor)",
-                                          self._create_healthy_liver,
-                                          data_func=lambda: {"created": True}):
-                logger.warning("Verificacion de higado sano fallo, continuando...")
-            self._save_scene("10_higado_sano")
-            self.tomar_screenshot("10_higado_sano")
+    def _post_healthy_liver(self):
+        self._save_scene("10_higado_sano")
+        self.tomar_screenshot("10_higado_sano")
 
-        # Validacion medica del tumor
-        self._log_consola("Esperando validacion medica del tumor...")
-        if not self._checkpoint_step(self.STEP_VALIDATE_TUMOR, "Validacion medica del tumor",
-                                      lambda: self._validate_tumor(context=tumor_mode),
-                                      data_func=lambda: {"context": tumor_mode,
-                                                         "timestamp": __import__('datetime').datetime.now().isoformat()}):
-            logger.error("Validacion tumoral rechazada. Pipeline detenido.")
-            self._log_consola("Validacion tumoral RECHAZADA. Pipeline detenido.")
-            self._report()
-            return
+    def _post_validate_tumor(self):
         self._save_scene("11_validacion_tumor")
         self.tomar_screenshot("11_validacion_tumor")
 
-        # Segmentacion corporal (body)
-        self._log_consola("Segmentando contorno corporal con TotalSegmentator (task='body')...")
-        if not self._checkpoint_step(self.STEP_SEGMENT_BODY, "Segmentacion corporal (body)",
-                                      self._segment_body,
-                                      data_func=lambda: {"task": "body", "fast": True, "force_cpu": True}):
-            logger.warning("Segmentacion corporal fallo, continuando sin body...")
+    def _post_segment_body(self):
         self._save_scene("12_segment_body")
         self.tomar_screenshot("12_segment_body")
 
-        # Exportar labelmap
-        self._log_consola("Exportando labelmap dosimetrica con IDs de tissue_config...")
-        if not self._checkpoint_step(self.STEP_EXPORT_LABELMAP, "Exportar labelmap dosimetrica",
-                                      self._export_labelmap,
-                                      data_func=lambda: {"output_dir": self.labelmap_dir}):
-            logger.warning("Exportacion de labelmap fallo, continuando...")
+    def _post_export_labelmap(self):
         self._save_scene("13_labelmap_exportada")
         self.tomar_screenshot("13_labelmap_exportada")
 
-        # Pipeline Mod1 completado
+    # ────────────────────────────────────────────────────────────
+    # WORKER SIGNAL HANDLERS
+    # ────────────────────────────────────────────────────────────
+
+    def _on_worker_step_completed(self, name, result, elapsed):
+        """Un paso se completo exitosamente."""
+        # El post_fn ya se ejecuto dentro del checkpoint_step_wrapper
+        logger.info(f"  [Worker] Paso '{name}' OK ({elapsed:.1f}s)")
+
+    def _on_worker_step_error(self, name, error_msg, elapsed):
+        """Un paso fallo."""
+        logger.error(f"  [Worker] Paso '{name}' FALLO: {error_msg}")
+
+    def _on_worker_blocking_started(self, name):
+        """Un paso pesado (threaded) comenzo."""
+        self._log_consola(f"Iniciando paso pesado: {name} (Slicer responde en paralelo)...")
+
+    def _on_worker_pipeline_completed(self):
+        """Todos los pasos terminaron (con o sin errores)."""
+        # Verificar si hubo errores fatales
+        errores = self.results.get("errores", [])
+        has_fatal = any("CRITICO" in e for e in errores)
+
+        tumor_mode = self.tumor_config.get("mode", "synthetic")
+        create_healthy = self.tumor_config.get("create_healthy_liver", True)
+
         logger.info("")
         logger.info("  PIPELINE MODULO 1 COMPLETADO")
         logger.info("")
@@ -386,11 +657,105 @@ class PipelineMod1:
         logger.info("")
 
         self._log_consola("Modulo 1 completado. Generando reporte...")
-        ok = self._report()
+        ok = not has_fatal
         if ok:
             self._log_consola("Modulo 1 finalizado EXITOSAMENTE")
         else:
             self._log_consola("Modulo 1 finalizado con ERRORES. Revise el reporte.")
+        self._report()
+
+    # ────────────────────────────────────────────────────────────
+    # WRAPPER: checkpoint_step + post-action unificados
+    # ────────────────────────────────────────────────────────────
+
+    def _checkpoint_step_wrapper(self, step_name, display_name, func,
+                                  data_func=None, critical=False, post_fn=None):
+        """
+        Wrapper unificado que:
+        1. Verifica si el checkpoint ya esta completo (salta si es asi)
+        2. Ejecuta func() con medicion de tiempo
+        3. Registra exito/fallo en self.results
+        4. Marca checkpoint
+        5. Corre AI review
+        6. Ejecuta post_fn si existe
+
+        Args:
+            step_name: clave del checkpoint
+            display_name: nombre para mostrar en logs
+            func: callable del paso
+            data_func: callable que retorna dict para guardar en checkpoint
+            critical: si True, un fallo aborta el pipeline completo
+            post_fn: callable a ejecutar DESPUES del exito (save_scene, screenshot, etc.)
+
+        Returns:
+            True si el paso se completo exitosamente
+        """
+        # ── Checkpoint skip ──
+        if self.checkpoint.is_completed(step_name):
+            logger.info(f"  [{'...'}]: ya completado (checkpoint salta)")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": True, "tiempo": 0, "checkpoint": True
+            })
+            self._log_consola(f"[checkpoint] {display_name} — ya completado, saltando")
+            cp_data = self.checkpoint.get_data(step_name)
+            if cp_data:
+                self._restore_step_state(step_name, cp_data)
+            # Tambien ejecutar post_fn si existe (necesario para restaurar vistas)
+            if post_fn:
+                try:
+                    post_fn()
+                except Exception as e:
+                    logger.debug(f"Post-step checkpoint skip fallo: {e}")
+            return True
+
+        # ── Ejecutar ──
+        logger.info(f"[{len(self.results['pasos'])+1}] {display_name}...")
+        show_progress(f"Ejecutando: {display_name}")
+        self._log_consola(f"Ejecutando: {display_name}...")
+
+        t0 = time.time()
+        try:
+            func()
+            elapsed = time.time() - t0
+            logger.info(f"  Completado en {elapsed:.1f}s")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": True, "tiempo": elapsed
+            })
+            self.results["tiempos"][display_name] = elapsed
+            data = data_func() if data_func else {}
+            self.checkpoint.mark_completed(step_name, data=data)
+            show_progress(f"{display_name} completado")
+            self._log_consola_ok(f"{display_name} — {elapsed:.1f}s")
+            self._ai_review_paso(display_name, ok=True, elapsed=elapsed,
+                                 step_name=step_name, data=data)
+
+            # Post-step handler (scene, screenshot, views)
+            if post_fn:
+                try:
+                    post_fn()
+                except Exception as e:
+                    logger.warning(f"Post-step handler fallo: {e}")
+
+            return True
+
+        except Exception as e:
+            elapsed = time.time() - t0
+            logger.error(f"  FALLO: {e}")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": False, "tiempo": elapsed
+            })
+            error_msg = f"{display_name}: {e}"
+            if critical:
+                error_msg = f"[CRITICO] {error_msg}"
+            self.results["errores"].append(error_msg)
+            show_progress(f"FALLO: {display_name}")
+            self._log_consola_error(f"{display_name} — FALLO: {e}")
+            self._ai_review_paso(display_name, ok=False, elapsed=elapsed,
+                                 step_name=step_name, error=str(e))
+            if critical:
+                logger.error(f"  [CRITICO] {display_name} fallo — pipeline no puede continuar")
+                self.worker.abort()
+            return False
 
     # ==================================================================
     # METODOS INTERNOS (extraidos de pipeline.py)
@@ -748,6 +1113,48 @@ class PipelineMod1:
                     pass
         except Exception as e:
             logger.warning(f"No se pudo generar representacion 3D: {e}")
+
+    def _pre_check_slicer(self):
+        """Ejecuta la verificacion de Slicer y arranque MCP si no esta en checkpoint."""
+        if not self.checkpoint.is_completed(self.STEP_CHECK_SLICER):
+            try:
+                self._check_slicer()
+                add_module_path()
+                self.checkpoint.mark_completed(self.STEP_CHECK_SLICER,
+                                               data={"slicer_version": self._slicer_version()})
+            except Exception as e:
+                logger.warning(f"Pre-check Slicer fallo (se reintentara en worker): {e}")
+
+    def _restore_preexisting_checkpoints(self):
+        """Restaura estado de nodos desde checkpoints previos."""
+        for step_name in [self.STEP_LOAD_DICOM, self.STEP_REMOVE_COUCH,
+                          self.STEP_RESAMPLE_PET, self.STEP_SEGMENT]:
+            if self.checkpoint.is_completed(step_name):
+                cp_data = self.checkpoint.get_data(step_name)
+                if cp_data:
+                    self._restore_step_state(step_name, cp_data)
+
+    def _log_mod1_summary(self):
+        """Loggea resumen de flujo de Mod1."""
+        tumor_mode = self.tumor_config.get("mode", "synthetic")
+        create_healthy = self.tumor_config.get("create_healthy_liver", True)
+        logger.info("")
+        logger.info("  PIPELINE MODULO 1 COMPLETADO")
+        logger.info("")
+        logger.info("  Flujo ejecutado:")
+        logger.info("    1. Carga DICOM")
+        logger.info("    2. Eliminar camilla/aire")
+        logger.info("    3. Re-muestreo PET")
+        logger.info("    4. Fusion CT+PET")
+        logger.info("    5. Anonimizar")
+        logger.info("    6. TotalSegmentator (task=total)")
+        logger.info("    7. Validacion segmentacion")
+        logger.info(f"    8. Tumor (modo: {tumor_mode})")
+        logger.info("    9. Validacion medica del tumor")
+        if create_healthy:
+            logger.info("   10. Higado sano = higado - tumor")
+        logger.info("   11. TotalSegmentator (task=body)")
+        logger.info("   12. Exportar labelmap dosimetrica")
 
     def _save_scene(self, tag=None):
         try:

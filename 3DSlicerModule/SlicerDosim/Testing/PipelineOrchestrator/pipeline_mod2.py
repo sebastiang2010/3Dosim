@@ -13,10 +13,9 @@ import os
 import time
 
 from PipelineOrchestrator.checkpoint import CheckpointManager
+from PipelineOrchestrator.worker import PipelineWorker
 from PipelineOrchestrator.utils import logger as base_logger, add_module_path, show_progress
 from PipelineOrchestrator.views import load_pipeline_config
-from PipelineOrchestrator.comandos import ConsolaComandos
-from PipelineOrchestrator import ai_supervisor
 
 logger = logging.getLogger("3DosimMod2")
 
@@ -103,8 +102,7 @@ class PipelineMod2:
     def __init__(self, scene_path=None, output_dir=None, reset=False,
                  isotope="Y-90", n_particles=int(1e7),
                  flip_rows=True, flip_z=False, refine_hu=False,
-                 n_liver_tallies=5, n_tumor_tallies=10,
-                 no_consola=False):
+                 n_liver_tallies=5, n_tumor_tallies=10):
         """
         Args:
             scene_path: Ruta al archivo .mrb (de Mod1). Si None, auto-detecta.
@@ -117,7 +115,6 @@ class PipelineMod2:
             refine_hu: Refinar mapeo HU -> materiales.
             n_liver_tallies: Numero de tallies de higado en FMESH4.
             n_tumor_tallies: Numero de tallies de tumor en FMESH4.
-            no_consola: Si True, deshabilita la consola interactiva.
         """
         # ── Scene path ──
         self.scene_path = scene_path or self._auto_detect_scene()
@@ -151,15 +148,6 @@ class PipelineMod2:
         self.n_tumor_tallies = n_tumor_tallies
         self.mcnp_output_path = None
 
-        # ── Consola interactiva ──
-        self.no_consola = no_consola
-        self.consola = None
-        if not no_consola:
-            try:
-                self.consola = ConsolaComandos(output_dir=self.output_dir)
-            except Exception:
-                self.consola = None
-
         # ── Nodos (se llenan en scan_nodes) ──
         self.ct_node = None
         self.ct_masked_node = None
@@ -184,115 +172,172 @@ class PipelineMod2:
         logger.info(f"  Flip Y:       {flip_rows}")
         logger.info(f"  Flip Z:       {flip_z}")
         logger.info(f"  Reset:        {'SI' if reset else 'NO (retoma checkpoints)'}")
-        logger.info(f"  Consola:      {'SI' if not no_consola else 'NO'}")
-        if not no_consola and self.consola:
-            logger.info(f"  Consola OK")
         logger.info("")
 
     # ==================================================================
-    # RUN
+    # RUN (blocking — backward compatible)
     # ==================================================================
 
     def run(self):
-        """Ejecuta el pipeline Mod2 completo."""
+        """Ejecuta el pipeline Mod2 de forma BLOQUEANTE.
+
+        Usa PipelineWorker internamente pero se bloquea hasta que
+        todos los pasos terminen. Compatible con entry points existentes.
+        """
         logger.info("")
         logger.info("INICIANDO PIPELINE MODULO 2")
         logger.info("")
 
-        # ── Mostrar consola interactiva ──
-        if self.consola:
-            self.consola.log("=" * 50)
-            self.consola.log(" 3Dosim Mod2 - Generacion MCNP")
-            self.consola.log(" Escribi 'ayuda' para comandos disponibles")
-            self.consola.log("=" * 50)
-            self.consola.log("")
-            self.consola.mostrar()
-        self._log_consola("Iniciando Modulo 2...")
-
         if not self.scene_path or not os.path.exists(self.scene_path):
             logger.error("No hay escena .mrb disponible. Abortando.")
             logger.error("Use --scene <path> o ejecute Mod1 primero.")
-            self._log_consola("ERROR: No hay escena .mrb disponible")
             self._report()
             return
 
-        if self._checkpoint_step(self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
-                                 self._check_slicer):
-            add_module_path()
+        # Construir worker
+        self._build_worker()
 
-        # load_scene SIEMPRE se ejecuta (no checkpointeable)
-        # porque cada sesion de Slicer es fresh y necesita la escena cargada
+        # Bloquear hasta que termine
+        self._pipeline_ok = False
+        self._pipeline_done = False
+
         try:
-            self._load_scene()
-            self.results["pasos"].append({
-                "nombre": "Cargando escena .mrb", "ok": True, "tiempo": 0
-            })
-            self._log_consola("Escena cargada exitosamente")
-        except Exception as e:
-            logger.error(f"Fallo critico al cargar escena: {e}. Abortando.")
-            self._log_consola(f"ERROR: Fallo al cargar escena - {e}")
-            self._report()
+            from qt import QEventLoop
+            self.worker.pipeline_completed.connect(lambda: setattr(self, '_pipeline_ok', True))
+            self.worker.pipeline_completed.connect(lambda: setattr(self, '_pipeline_done', True))
+            self.worker.step_error.connect(lambda n, e, t: setattr(self, '_pipeline_ok', False))
+            self.worker.start()
+
+            loop = QEventLoop()
+            self.worker.pipeline_completed.connect(loop.quit)
+            self.worker.step_error.connect(lambda n, e, t: loop.quit())
+            loop.exec_()
+        except ImportError:
+            self.worker.start()
+            import time
+            while self.worker.is_running():
+                time.sleep(0.1)
+
+        ok = self._pipeline_ok
+        if ok:
+            logger.info("Modulo 2 finalizado EXITOSAMENTE")
+        else:
+            logger.info("Modulo 2 finalizado con ERRORES. Revise el reporte.")
+
+    # ────────────────────────────────────────────────────────────
+    # RUN ASYNC (non-blocking)
+    # ────────────────────────────────────────────────────────────
+
+    def run_async(self, on_completed=None, on_error=None):
+        """
+        Ejecuta el pipeline Mod2 de forma NO BLOQUEANTE.
+
+        Args:
+            on_completed: callback(success: bool)
+            on_error: callback(step_name: str, error: str)
+        """
+        logger.info("")
+        logger.info("INICIANDO PIPELINE MODULO 2 (async)")
+        logger.info("")
+
+        if not self.scene_path or not os.path.exists(self.scene_path):
+            logger.error("No hay escena .mrb disponible.")
+            if on_error:
+                on_error("scene_check", "Escena .mrb no encontrada")
             return
 
-        # scan_nodes SIEMPRE se ejecuta (es barato y asegura nodos frescos)
-        try:
-            self._scan_nodes()
-            self.results["pasos"].append({
-                "nombre": "Escaneando nodos de la escena", "ok": True, "tiempo": 0
-            })
-            self._log_consola(f"Nodos: CT={self.ct_node.GetName() if self.ct_node else 'N/A'}, "
-                             f"PET={self.pet_node.GetName() if self.pet_node else 'N/A'}, "
-                             f"Seg={self.segmentation_node.GetName() if self.segmentation_node else 'N/A'}")
-        except Exception as e:
-            logger.error(f"Fallo al escanear nodos: {e}. Abortando.")
-            self._log_consola(f"ERROR: Fallo al escanear nodos - {e}")
-            self._report()
-            return
+        self._build_worker()
 
-        # ── VALIDACION PRE-MCNP ──
-        self._log_consola("Verificando prerrequisitos para MCNP...")
-        if not self._checkpoint_step("validate_prereqs", "Validando prerrequisitos MCNP",
-                                      self._validate_prerequisites,
-                                      data_func=lambda: {"validado": True}):
-            logger.error("Prerrequisitos MCNP no satisfechos. Abortando.")
-            self._log_consola("ERROR: Prerrequisitos MCNP no satisfechos. Revise logs.")
-            self._report()
-            return
-        self._log_consola("Prerrequisitos OK")
+        if on_completed:
+            self.worker.pipeline_completed.connect(
+                lambda: on_completed(getattr(self, '_pipeline_ok', False)))
+        if on_error:
+            self.worker.step_error.connect(
+                lambda name, err, elapsed: on_error(name, err))
 
-        # ── GENERACION MCNP ──
-        self._log_consola(f"Generando entrada MCNP (isotopo: {self.isotope})...")
-        if not self._checkpoint_step(self.STEP_GENERATE_MCNP, "Generando entrada MCNP",
-                                      self._generate_mcnp,
-                                      data_func=lambda: {
-                                          "isotope": self.isotope,
-                                          "n_particles": self.n_particles,
-                                          "output_path": self.mcnp_output_path,
-                                          "file_size_kb": os.path.getsize(self.mcnp_output_path) / 1024 if self.mcnp_output_path and os.path.exists(self.mcnp_output_path) else 0,
-                                      }):
-            logger.error("Generacion MCNP fallida. Abortando.")
-            self._log_consola("ERROR: Generacion MCNP fallida. Revise logs.")
-            self._report()
-            return
+        self._pipeline_ok = False
+        self.worker.pipeline_completed.connect(lambda: setattr(self, '_pipeline_ok', True))
+        self.worker.start()
 
-        self._save_scene("02_post_mcnp")
-        self._log_consola(f"Archivo MCNP generado: {os.path.basename(self.mcnp_output_path)}")
+        logger.info("  [Async] Pipeline Mod2 iniciado — Slicer responde durante la ejecucion")
 
-        # ── VALIDACION MCNP ──
-        self._log_consola("Validando archivo MCNP...")
-        if not self._checkpoint_step(self.STEP_VALIDATE_MCNP, "Validando archivo MCNP",
-                                      self._validate_mcnp,
-                                      data_func=lambda: {
-                                          "mcnp_path": self.mcnp_output_path,
-                                          "exists": os.path.exists(self.mcnp_output_path) if self.mcnp_output_path else False,
-                                      }):
-            logger.warning("Validacion MCNP encontro problemas potenciales.")
-            self._log_consola(f"ADVERTENCIA: Validacion MCNP encontro problemas")
+    # ────────────────────────────────────────────────────────────
+    # BUILD WORKER
+    # ────────────────────────────────────────────────────────────
 
-        # ── DIALOGO FINAL ──
-        self._show_mcnp_summary_dialog()
+    def _build_worker(self):
+        """Construye el PipelineWorker con los pasos de Mod2."""
+        steps = []
 
-        # Pipeline Mod2 completado
+        # Paso 1: check_slicer
+        steps.append((self.STEP_CHECK_SLICER, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_CHECK_SLICER, "Verificando entorno Slicer",
+                          self._check_slicer,
+                          data_func=lambda: {"slicer_version": self._slicer_version()},
+                          post_fn=lambda: add_module_path())))
+
+        # Paso 2: load_scene (SIEMPRE se ejecuta, no checkpointeable)
+        steps.append(("load_scene", False,
+                      lambda: self._always_run_step(
+                          "load_scene", "Cargando escena .mrb", self._load_scene,
+                          critical=True)))
+
+        # Paso 3: scan_nodes (SIEMPRE se ejecuta)
+        steps.append(("scan_nodes", False,
+                      lambda: self._always_run_step(
+                          "scan_nodes", "Escaneando nodos de la escena", self._scan_nodes,
+                          critical=True)))
+
+        # Paso 4: generate_mcnp (~30s → HEAVY)
+        steps.append((self.STEP_GENERATE_MCNP, True,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_GENERATE_MCNP, "Generando entrada MCNP",
+                          self._generate_mcnp,
+                          critical=True,
+                          data_func=lambda: {
+                              "isotope": self.isotope,
+                              "n_particles": self.n_particles,
+                              "output_path": self.mcnp_output_path,
+                          },
+                          post_fn=lambda: self._save_scene("02_post_mcnp"))))
+
+        # Paso 5: validate_mcnp (light)
+        steps.append((self.STEP_VALIDATE_MCNP, False,
+                      lambda: self._checkpoint_step_wrapper(
+                          self.STEP_VALIDATE_MCNP, "Validando archivo MCNP",
+                          self._validate_mcnp,
+                          data_func=lambda: {
+                              "mcnp_path": self.mcnp_output_path,
+                              "exists": os.path.exists(self.mcnp_output_path) if self.mcnp_output_path else False,
+                          })))
+
+        self.worker = PipelineWorker(steps)
+
+        # ── Conectar señales ──
+        self.worker.step_completed.connect(self._on_worker_step_completed)
+        self.worker.step_error.connect(self._on_worker_step_error)
+        self.worker.blocking_started.connect(self._on_worker_blocking_started)
+        self.worker.pipeline_completed.connect(self._on_worker_pipeline_completed)
+
+    # ────────────────────────────────────────────────────────────
+    # WORKER SIGNAL HANDLERS
+    # ────────────────────────────────────────────────────────────
+
+    def _on_worker_step_completed(self, name, result, elapsed):
+        logger.info(f"  [Worker] Paso '{name}' OK ({elapsed:.1f}s)")
+
+    def _on_worker_step_error(self, name, error_msg, elapsed):
+        logger.error(f"  [Worker] Paso '{name}' FALLO: {error_msg}")
+
+    def _on_worker_blocking_started(self, name):
+        logger.info(f"  [Worker] Iniciando paso pesado: {name} (thread)")
+
+    def _on_worker_pipeline_completed(self):
+        """Todos los pasos terminaron."""
+        errores = self.results.get("errores", [])
+        has_fatal = any("CRITICO" in e for e in errores)
+
         logger.info("")
         logger.info("  PIPELINE MODULO 2 COMPLETADO")
         logger.info("")
@@ -300,19 +345,116 @@ class PipelineMod2:
         logger.info("    1. Verificar Slicer")
         logger.info("    2. Cargar escena .mrb desde Mod1")
         logger.info("    3. Escanear nodos (CT, PET, Segmentacion)")
-        logger.info("    4. Validar prerrequisitos MCNP")
-        logger.info("    5. Generar entrada MCNP")
-        logger.info("    6. Validar archivo MCNP generado")
+        logger.info("    4. Generar entrada MCNP")
+        logger.info("    5. Validar archivo MCNP generado")
         logger.info("")
         logger.info("  Siguiente paso:")
         logger.info("    Modulo 3: analisis dosimetrico desde output MCNP")
         logger.info("")
 
-        ok = self._report()
-        if ok:
-            self._log_consola("Modulo 2 finalizado EXITOSAMENTE")
-        else:
-            self._log_consola("Modulo 2 finalizado con ERRORES. Revise el reporte.")
+        ok = not has_fatal
+        self._report()
+
+    # ────────────────────────────────────────────────────────────
+    # WRAPPER: checkpoint_step unificado (igual que Mod1)
+    # ────────────────────────────────────────────────────────────
+
+    def _checkpoint_step_wrapper(self, step_name, display_name, func,
+                                  data_func=None, critical=False, post_fn=None):
+        """Wrapper unificado con checkpoint, timing, registro y post-action."""
+        if self.checkpoint.is_completed(step_name):
+            logger.info(f"  [{'...'}]: ya completado (checkpoint salta)")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": True, "tiempo": 0, "checkpoint": True
+            })
+            cp_data = self.checkpoint.get_data(step_name)
+            if cp_data:
+                self._restore_step_state(step_name, cp_data)
+            if post_fn:
+                try:
+                    post_fn()
+                except Exception as e:
+                    logger.debug(f"Post-step checkpoint skip fallo: {e}")
+            return True
+
+        logger.info(f"[{len(self.results['pasos'])+1}] {display_name}...")
+        show_progress(f"Ejecutando: {display_name}")
+
+        t0 = time.time()
+        try:
+            func()
+            elapsed = time.time() - t0
+            logger.info(f"  Completado en {elapsed:.1f}s")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": True, "tiempo": elapsed
+            })
+            self.results["tiempos"][display_name] = elapsed
+            data = data_func() if data_func else {}
+            self.checkpoint.mark_completed(step_name, data=data)
+            show_progress(f"{display_name} completado")
+
+            if post_fn:
+                try:
+                    post_fn()
+                except Exception as e:
+                    logger.warning(f"Post-step handler fallo: {e}")
+
+            return True
+        except Exception as e:
+            elapsed = time.time() - t0
+            logger.error(f"  FALLO: {e}")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": False, "tiempo": elapsed
+            })
+            error_msg = f"{display_name}: {e}"
+            if critical:
+                error_msg = f"[CRITICO] {error_msg}"
+            self.results["errores"].append(error_msg)
+            show_progress(f"FALLO: {display_name}")
+            if critical:
+                logger.error(f"  [CRITICO] {display_name} fallo — abortando")
+                self.worker.abort()
+            return False
+
+    def _always_run_step(self, name, display_name, func, critical=False):
+        """
+        Ejecuta un paso que SIEMPRE corre (no checkpointeable).
+        Registra el resultado en self.results["pasos"].
+        """
+        logger.info(f"[{len(self.results['pasos'])+1}] {display_name}...")
+        show_progress(f"Ejecutando: {display_name}")
+        t0 = time.time()
+        try:
+            func()
+            elapsed = time.time() - t0
+            logger.info(f"  Completado en {elapsed:.1f}s")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": True, "tiempo": elapsed
+            })
+            show_progress(f"{display_name} completado")
+            return True
+        except Exception as e:
+            elapsed = time.time() - t0
+            logger.error(f"  FALLO: {e}")
+            self.results["pasos"].append({
+                "nombre": display_name, "ok": False, "tiempo": elapsed
+            })
+            error_msg = f"{display_name}: {e}"
+            if critical:
+                error_msg = f"[CRITICO] {error_msg}"
+                logger.error(f"  [CRITICO] {display_name} fallo — abortando")
+            self.results["errores"].append(error_msg)
+            show_progress(f"FALLO: {display_name}")
+            if critical:
+                self.worker.abort()
+            raise  # re-raise to let worker handle signal emission
+
+    def _slicer_version(self) -> str:
+        try:
+            import slicer
+            return f"{slicer.app.majorVersion}.{slicer.app.minorVersion}"
+        except ImportError:
+            return "desconocido"
 
     # ==================================================================
     # CHECKPOINT + HELPERS (mismo patron que PipelineMod1)
@@ -344,8 +486,6 @@ class PipelineMod2:
             data = data_func() if data_func else {}
             self.checkpoint.mark_completed(step_name, data=data)
             show_progress(f"{display_name} completado")
-            self._ai_review_paso(display_name, ok=True, elapsed=elapsed,
-                                 step_name=step_name, data=data)
             return True
         except Exception as e:
             elapsed = time.time() - t0
@@ -355,30 +495,7 @@ class PipelineMod2:
             })
             self.results["errores"].append(f"{display_name}: {e}")
             show_progress(f"FALLO: {display_name}")
-            self._ai_review_paso(display_name, ok=False, elapsed=elapsed,
-                                 step_name=step_name, error=str(e))
             return False
-
-    def _ai_review_paso(self, display_name, ok, elapsed, step_name, data=None, error=None):
-        """Envia el paso completado al AI supervisor para revision."""
-        try:
-            ctx = {
-                "paso": display_name, "ok": ok, "tiempo": elapsed,
-                "datos": data or {}, "errores": [error] if error else [],
-            }
-            nodos_info = {}
-            if self.ct_node:
-                nodos_info["CT"] = self.ct_node.GetName()
-            if self.pet_node:
-                nodos_info["PET"] = self.pet_node.GetName()
-            if self.segmentation_node:
-                nodos_info["Segmentacion"] = self.segmentation_node.GetName()
-            ctx["datos"]["nodos_activos"] = nodos_info
-            ctx["datos"]["isotope"] = self.isotope
-            ctx["datos"]["output_dir"] = self.mcnp_dir
-            ai_supervisor.revisar_paso(ctx, consola=self.consola)
-        except Exception as e:
-            logger.debug(f"AI review no disponible: {e}")
 
     def _restore_step_state(self, step_name, data):
         """Restaura estado desde checkpoint data.
@@ -532,157 +649,6 @@ class PipelineMod2:
     # ==================================================================
     # STEP METHODS
     # ==================================================================
-
-    # ==================================================================
-    # LOGGING A CONSOLA
-    # ==================================================================
-
-    def _log_consola(self, mensaje: str):
-        """Envia un mensaje a la consola interactiva (si existe)."""
-        if self.consola:
-            self.consola.log(mensaje)
-
-    def _log_consola_ok(self, mensaje: str):
-        """Envia un mensaje de exito a la consola."""
-        if self.consola:
-            self.consola.log_ok(mensaje)
-
-    def _log_consola_error(self, mensaje: str):
-        """Envia un mensaje de error a la consola."""
-        if self.consola:
-            self.consola.log_error(mensaje)
-
-    # ==================================================================
-    # VALIDACION PRE-MCNP
-    # ==================================================================
-
-    def _validate_prerequisites(self):
-        """Valida que todos los prerrequisitos para generar MCNP esten OK.
-        
-        Si algo falta, lanza RuntimeError con mensaje claro de lo que falla.
-        """
-        import slicer
-        errores = []
-
-        # 1. CT node debe existir y tener datos
-        if self.ct_node is None:
-            errores.append("No se encontro nodo CT en la escena")
-        else:
-            img = self.ct_node.GetImageData()
-            if img is None:
-                errores.append(f"El nodo CT '{self.ct_node.GetName()}' no tiene datos de imagen")
-
-        # 2. Segmentation node debe existir
-        if self.segmentation_node is None:
-            errores.append("No se encontro nodo de segmentacion/labelmap en la escena")
-        else:
-            # Si es labelmap, verificar que tenga datos
-            if hasattr(self.segmentation_node, 'GetImageData'):
-                img = self.segmentation_node.GetImageData()
-                if img is None:
-                    errores.append(f"Nodo '{self.segmentation_node.GetName()}' no tiene datos")
-
-        # 3. Output dir debe ser escribible
-        try:
-            os.makedirs(self.mcnp_dir, exist_ok=True)
-            test_file = os.path.join(self.mcnp_dir, ".write_test")
-            with open(test_file, "w") as f:
-                f.write("test")
-            os.remove(test_file)
-        except Exception as e:
-            errores.append(f"El directorio de salida no es escribible: {e}")
-
-        # 4. MCNPInputGenerator debe ser importable
-        try:
-            from SlicerDosim.SlicerDosimLib import MCNPInputGenerator
-        except ImportError:
-            try:
-                from SlicerDosimLib import MCNPInputGenerator
-            except ImportError as e:
-                errores.append(f"No se pudo importar MCNPInputGenerator: {e}")
-
-        if errores:
-            msg = "PRERREQUISITOS MCNP NO SATISFECHOS:\n"
-            for i, err in enumerate(errores, 1):
-                msg += f"  {i}. {err}\n"
-            logger.error(msg)
-            raise RuntimeError(msg)
-
-        logger.info("  Todos los prerrequisitos MCNP OK:")
-        logger.info(f"    CT:       {self.ct_node.GetName()}")
-        logger.info(f"    Segment:  {self.segmentation_node.GetName()}")
-        logger.info(f"    Output:   {self.mcnp_dir}")
-        logger.info(f"    Generator: importable")
-
-    # ==================================================================
-    # DIALOGO FINAL MCNP
-    # ==================================================================
-
-    def _show_mcnp_summary_dialog(self):
-        """Muestra dialogo NO modal con resumen MCNP y comando de ejecucion."""
-        try:
-            import slicer
-            from qt import QMessageBox
-
-            if not self.mcnp_output_path or not os.path.exists(self.mcnp_output_path):
-                logger.warning("No hay archivo MCNP para mostrar en dialogo")
-                return
-
-            file_size_kb = os.path.getsize(self.mcnp_output_path) / 1024
-            file_name = os.path.basename(self.mcnp_output_path)
-
-            # Construir comando de ejecucion MCNP
-            mcnp_exe = "mcnp5"  # o mcnp6
-            exec_cmd = (
-                f"{mcnp_exe} i={file_name} name=3Dosim."
-            )
-
-            msg_box = QMessageBox(slicer.util.mainWindow())
-            msg_box.setWindowTitle("3Dosim - MCNP Generado")
-            msg_box.setIcon(QMessageBox.Information)
-            msg_box.setTextFormat(1)  # Qt.RichText
-
-            labelmap_name = self.segmentation_node.GetName() if self.segmentation_node else "N/A"
-            ct_name = self.ct_node.GetName() if self.ct_node else "N/A"
-
-            html = (
-                f"<b>Archivo MCNP generado correctamente</b><br><br>"
-                f"<b>Archivo:</b> {file_name}<br>"
-                f"<b>Ubicacion:</b> {self.mcnp_dir}<br>"
-                f"<b>Tamano:</b> {file_size_kb:.1f} KB<br><br>"
-                f"<b>Isotopo:</b> {self.isotope}<br>"
-                f"<b>Particulas:</b> {self.n_particles:.0e}<br>"
-                f"<b>Flip Y:</b> {'Si' if self.flip_rows else 'No'}<br>"
-                f"<b>Flip Z:</b> {'Si' if self.flip_z else 'No'}<br>"
-                f"<b>Refinar HU:</b> {'Si' if self.refine_hu else 'No'}<br><br>"
-                f"<b>Referencias espaciales:</b><br>"
-                f"&nbsp;&nbsp;CT: {ct_name}<br>"
-                f"&nbsp;&nbsp;Labelmap: {labelmap_name}<br><br>"
-                f"<b>Ejecutar MCNP:</b><br>"
-                f"<code style='background:#f0f0f0; padding:4px 8px; display:block; "
-                f"margin:4px 0; border-radius:4px;'>"
-                f"cd /d {self.mcnp_dir}<br>"
-                f"{exec_cmd}"
-                f"</code>"
-            )
-            msg_box.setText(html)
-            msg_box.setStandardButtons(QMessageBox.Ok)
-            msg_box.setModal(False)
-            msg_box.show()
-            msg_box.raise_()
-            msg_box.activateWindow()
-            logger.info("  Dialogo de resumen MCNP mostrado")
-        except Exception as e:
-            logger.warning(f"No se pudo mostrar dialogo MCNP: {e}")
-            # Fallback: mostrar en log
-            logger.info("  =========== RESUMEN MCNP ===========")
-            logger.info(f"  Archivo: {self.mcnp_output_path}")
-            logger.info(f"  Tamano: {file_size_kb:.1f} KB")
-            logger.info(f"  Isotopo: {self.isotope}")
-            logger.info(f"  Particulas: {self.n_particles:.0e}")
-            logger.info(f"  cd {self.mcnp_dir}")
-            logger.info(f"  mcnp5 i={os.path.basename(self.mcnp_output_path)} name=3Dosim.")
-            logger.info("  ====================================")
 
     def _check_slicer(self):
         """Verifica que estamos dentro de 3D Slicer."""

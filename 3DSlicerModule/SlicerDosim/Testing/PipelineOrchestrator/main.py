@@ -11,9 +11,8 @@ Uso desde terminal:
   # Modulo 2: generacion MCNP desde escena .mrb (desde Mod1)
   Slicer.exe --python-script main.py --modulo 2 --scene "C:/ruta/escena.mrb"
 
-  # Modulo 3: analisis dosimetrico desde escena + MCTAL
-  Slicer.exe --python-script main.py --modulo 3 ^
-      --scene "C:/ruta/escena.mrb" --mctal "C:/ruta/mctal.m"
+  # Modulo 3: analisis dosimetrico (proximamente)
+  Slicer.exe --python-script main.py --modulo 3 --mcnp-output "C:/ruta/output"
 """
 
 import argparse
@@ -68,7 +67,6 @@ def run_mod2(args):
         flip_rows=args.flip if hasattr(args, 'flip') else True,
         flip_z=args.flip_z if hasattr(args, 'flip_z') else False,
         refine_hu=args.refine_hu if hasattr(args, 'refine_hu') else False,
-        no_consola=args.no_consola,
     )
     orchestrator.run()
 
@@ -77,17 +75,19 @@ def run_mod3(args):
     """Ejecuta PipelineMod3: analisis dosimetrico desde escena + MCTAL."""
     from PipelineOrchestrator.pipeline_mod3 import PipelineMod3
 
-    # Mod3 usa flip=True por defecto (compatibilidad MATLAB)
-    # --no-flip lo anula a False
-    flip_value = not args.no_flip if hasattr(args, 'no_flip') else True
+    # Auto-detectar paths si no se especificaron
+    scene_path = args.scene
+    if not scene_path:
+        scene_path = PipelineMod3._auto_detect_scene()
+
     orchestrator = PipelineMod3(
-        scene_path=args.scene,
+        scene_path=scene_path,
         mctal_path=args.mctal,
         labelmap_path=args.labelmap,
         activity_gbq=args.activity,
         output_dir=args.output,
         reset=args.reset,
-        flip=flip_value,
+        flip=args.flip if hasattr(args, 'flip') else True,
         no_consola=args.no_consola,
         patient_id=args.patient_id,
     )
@@ -194,13 +194,13 @@ def main():
         "--scene",
         type=str,
         default=None,
-        help="Ruta al archivo .mrb de escena (Mod2: carga desde Mod1, Mod3: escena con labelmap)",
+        help="Ruta al archivo .mrb de escena (Mod2: carga desde Mod1)",
     )
     parser.add_argument(
         "--output",
         type=str,
         default=None,
-        help="Directorio de salida (Mod2: MCNP output, Mod3: resultados dosimetria)",
+        help="Directorio de salida (Mod2: MCNP output)",
     )
     parser.add_argument(
         "--isotope",
@@ -234,34 +234,25 @@ def main():
         help="Invertir eje Z",
     )
 
-    # ── Argumentos Mod3 ──
+    # ── Argumentos Mod3 (analisis dosimetrico) ──
     parser.add_argument(
         "--mctal",
         type=str,
         default=None,
-        help="Ruta a archivo MCTAL (Mod3: analisis dosimetrico)",
+        help="Ruta al archivo MCTAL (Mod3: salida MCNP)",
     )
     parser.add_argument(
         "--labelmap",
         type=str,
         default=None,
-        help="Ruta a labelmap NIfTI (Mod3: analisis dosimetrico)",
+        help="Ruta a labelmap NIfTI (Mod3: desde Mod1)",
     )
     parser.add_argument(
         "--activity",
         type=float,
         default=None,
-        help="Actividad en GBq (Mod3: computar del PET si no se especifica)",
+        help="Actividad en GBq (Mod3: si no se especifica, computa desde PET)",
     )
-    parser.add_argument(
-        "--no-flip",
-        action="store_true",
-        default=False,
-        help="No aplicar flip Y a dosis MCTAL (Mod3: anula default=True)",
-    )
-    # Mod3 usa flip=True por defecto; Mod2/Legacy usan False
-    # Esto se maneja en cada run_* function
-
     args, _ = parser.parse_known_args()
 
     # ── Dispatch por modulo ──

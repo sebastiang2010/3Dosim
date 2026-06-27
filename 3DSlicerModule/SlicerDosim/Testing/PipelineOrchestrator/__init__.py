@@ -3,7 +3,8 @@ PipelineOrchestrator - Orchestrador del pipeline 3Dosim para 3D Slicer.
 
 Estructura modular que luego se promocionara a SlicerDosimLib/orchestrator/:
 
-  checkpoint.py          - CheckpointManager: estado persistente entre ejecuciones
+   worker.py              - PipelineWorker: QTimer chain + Thread+Polling (UI no-bloqueante)
+   checkpoint.py          - CheckpointManager: estado persistente entre ejecuciones
   anonymize.py           - Anonimizacion DICOM (pydicom)
   couch_remover.py       - Eliminacion de camilla y aire del CT
   segmentation.py        - TotalSegmentator (TotalSegmentatorLogic.process())
@@ -22,9 +23,6 @@ Estructura modular que luego se promocionara a SlicerDosimLib/orchestrator/:
     main_mcnp_from_scene.py         - Entry point CLI para pipeline MCNP desde escena
     deepseek_client.py     - Cliente OpenRouter multi-modelo
     monailabel_server.py   - Wrapper para iniciar servidor MONAI Label
-    pipeline_mod1.py       - Pipeline Mod1: carga, segmentacion, tumor
-    pipeline_mod2.py       - Pipeline Mod2: generacion MCNP desde escena
-    pipeline_mod3.py       - Pipeline Mod3: analisis dosimetrico desde MCTAL
 
 Todos los imports internos son ABSOLUTOS (from PipelineOrchestrator.xxx)
 para compatibilidad con 3D Slicer --python-script.
