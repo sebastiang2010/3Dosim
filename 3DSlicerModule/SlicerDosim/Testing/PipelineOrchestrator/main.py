@@ -83,7 +83,6 @@ def run_mod3(args):
     orchestrator = PipelineMod3(
         scene_path=scene_path,
         mctal_path=args.mctal,
-        labelmap_path=args.labelmap,
         activity_gbq=args.activity,
         output_dir=args.output,
         reset=args.reset,
@@ -245,7 +244,7 @@ def main():
         "--labelmap",
         type=str,
         default=None,
-        help="Ruta a labelmap NIfTI (Mod3: desde Mod1)",
+        help="Ruta a labelmap NIfTI (solo legacy; Mod3 obtiene labelmap desde escena)",
     )
     parser.add_argument(
         "--activity",

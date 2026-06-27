@@ -58,7 +58,6 @@ from PipelineOrchestrator.run_dosimetry_from_scene import (
     OUTPUT_DIR_DEFAULT,
     SCENE_DEFAULT,
     MCTAL_DEFAULT,
-    LABELMAP_DEFAULT,
     AI_PIPE_DIR,
 )
 from PipelineOrchestrator.latex_report_generator import generate_latex_report
@@ -110,7 +109,6 @@ class PipelineMod3:
         self,
         scene_path: Optional[str] = None,
         mctal_path: Optional[str] = None,
-        labelmap_path: Optional[str] = None,
         activity_gbq: Optional[float] = None,
         output_dir: Optional[str] = None,
         reset: bool = False,
@@ -122,7 +120,6 @@ class PipelineMod3:
         Args:
             scene_path: Ruta a escena .mrb. Si None, auto-detecta.
             mctal_path: Ruta a archivo MCTAL. Si None, usa default.
-            labelmap_path: Ruta a labelmap NIfTI. Si None, busca en escena.
             activity_gbq: Actividad en GBq. Si None, computa del PET.
             output_dir: Directorio de salida. Si None, usa default.
             reset: Reiniciar checkpoints.
@@ -132,7 +129,8 @@ class PipelineMod3:
         # ── Paths ──
         self.scene_path = scene_path or self._auto_detect_scene()
         self.mctal_path = mctal_path or MCTAL_DEFAULT
-        self.labelmap_path = labelmap_path or LABELMAP_DEFAULT
+        # Labelmap: siempre desde la escena .mrb, nunca desde archivo externo
+        self.labelmap_path = None
         self.activity_gbq_input = activity_gbq
         self.flip = flip
 
@@ -196,7 +194,7 @@ class PipelineMod3:
         logger.info("=" * 60)
         logger.info(f"  Escena:       {self.scene_path or 'NO DISPONIBLE'}")
         logger.info(f"  MCTAL:        {self.mctal_path}")
-        logger.info(f"  Labelmap:     {self.labelmap_path}")
+        logger.info(f"  Labelmap:     desde escena .mrb (no externo)")
         logger.info(f"  Activity:     {activity_gbq if activity_gbq is not None else 'desde PET'} GBq")
         logger.info(f"  Flip Y:       {flip}")
         logger.info(f"  Output:       {self.output_dir}")
@@ -982,29 +980,23 @@ class PipelineMod3:
             self.pet_node = None
             logger.info("  PET: No encontrado (se requiere --activity)")
 
-        # Labelmap: primero buscar en escena, luego en NIfTI
+        # Labelmap: exclusivamente desde la escena .mrb (nada de archivos externos)
         labelmap_from_scene = nodes.get("labelmap")
         if labelmap_from_scene:
             self.labelmap_node = labelmap_from_scene
             logger.info(f"  Labelmap: '{self.labelmap_node.GetName()}' (desde escena)")
-        elif os.path.exists(self.labelmap_path):
-            logger.info(f"  Cargando labelmap desde NIfTI: {self.labelmap_path}")
-            labelmap_node = slicer.util.loadVolume(self.labelmap_path)
-            if labelmap_node:
-                self.labelmap_node = labelmap_node
-                logger.info(f"  Labelmap: '{self.labelmap_node.GetName()}' (desde NIfTI)")
-            else:
-                raise RuntimeError(f"No se pudo cargar labelmap NIfTI: {self.labelmap_path}")
         else:
             # Buscar segmentacion como fallback
             seg_nodes = slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
             if seg_nodes:
                 self.segmentation_node = seg_nodes[0]
                 logger.info(f"  Segmentacion: '{self.segmentation_node.GetName()}' (fallback)")
-                # No hay labelmap array disponible, continuar con datos limitados
                 logger.warning("  No hay labelmap numerico. MIRD y DVH no estaran disponibles.")
             else:
-                raise RuntimeError("No se encontro labelmap ni segmentacion")
+                raise RuntimeError(
+                    "No se encontro labelmap ni segmentacion en la escena.\n"
+                    "Ejecute Modulo 1 primero para generar la segmentacion."
+                )
 
         # Extraer labelmap array
         if self.labelmap_node:
