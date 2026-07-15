@@ -58,10 +58,11 @@
     },
 
     // Configuracion de generacion de tumor
-    // Opciones: "synthetic" (esfera en higado), "load_file" (cargar NIfTI), "manual" (segmentar en Slicer)
+    // Opciones: "synthetic" (esfera en higado), "load_file" (cargar NIfTI),
+    //           "manual" (segmentar en Slicer), "ts_liver_lesions" (automatico con TotalSegmentator)
     "tumor": {
-        // Modo de generacion: "synthetic" | "load_file" | "manual"
-        "mode": "load_file",
+        // Modo de generacion: "synthetic" | "load_file" | "manual" | "ts_liver_lesions"
+        "mode": "ts_liver_lesions",
         // Radio del tumor sintetico en mm (solo para mode="synthetic")
         "synthetic_radius_mm": 10.0,
         // Nombre del segmento de higado en la segmentacion TS (para synthetic)
@@ -84,6 +85,13 @@
         "manual_segment_name": "Tumor_Manual",
         // Color del tumor manual [R, G, B] 0-1
         "manual_segment_color": [1.0, 0.5, 0.0],
+        // Para mode="ts_liver_lesions": segmentacion automatica con TotalSegmentator task=liver_lesions
+        // El modelo liver_lesions detecta lesiones hepaticas en CT y las enmascara dentro del higado
+        "ts_liver_lesions_segment_name": "Tumor_TS",
+        // Color del tumor automatico [R, G, B] 0-1
+        "ts_liver_lesions_segment_color": [1.0, 0.2, 0.2],
+        // Volumen minimo (cm³) para conservar una lesion (filtra ruido pequeno)
+        "ts_liver_lesions_min_volume_cc": 1.0,
         // Crear higado sano = higado - tumor (aplica a todos los modos)
         "create_healthy_liver": true
     }

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3Dosim - Arquitectura del Proyecto</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0d1117; color: #c9d1d9; min-height: 100vh;
+        }
+        header {
+            background: #161b22; border-bottom: 1px solid #30363d;
+            padding: 20px 40px; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        header h1 { font-size: 1.5rem; color: #58a6ff; }
+        .badge { background: #238636; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px 40px; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; text-align: center; }
+        .stat-card .number { font-size: 2rem; font-weight: 700; color: #58a6ff; }
+        .stat-card .label { color: #8b949e; font-size: 0.85rem; margin-top: 5px; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        .tab { padding: 8px 20px; border-radius: 6px 6px 0 0; cursor: pointer; border: 1px solid transparent; background: transparent; color: #8b949e; font-size: 0.9rem; }
+        .tab:hover { color: #c9d1d9; background: #1c2028; }
+        .tab.active { background: #161b22; color: #58a6ff; border-color: #30363d; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .diagram-section { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 30px; margin-bottom: 30px; }
+        .diagram-section h2 { color: #58a6ff; margin-bottom: 15px; font-size: 1.2rem; }
+        .diagram-box { background: #0d1117; border-radius: 8px; padding: 20px; overflow-x: auto; text-align: center; }
+        .diagram-box svg { max-width: 100%; height: auto; }
+        .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 20px; }
+        .legend-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; font-size: 0.85rem; }
+        .legend-color { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+        footer { text-align: center; padding: 20px; color: #484f58; font-size: 0.8rem; border-top: 1px solid #30363d; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>3Dosim - Arquitectura del Proyecto</h1>
+        <span class="badge">v3.14</span>
+    </header>
+
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card"><div class="number">5</div><div class="label">Modulos MATLAB</div></div>
+            <div class="stat-card"><div class="number">14</div><div class="label">Modulos Python</div></div>
+            <div class="stat-card"><div class="number">3</div><div class="label">Modulos Slicer</div></div>
+            <div class="stat-card"><div class="number">13</div><div class="label">Pasos Pipeline</div></div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('general', this)">Vista General</div>
+            <div class="tab" onclick="showTab('matlab', this)">MATLAB</div>
+            <div class="tab" onclick="showTab('python', this)">Python</div>
+            <div class="tab" onclick="showTab('pipeline', this)">Pipeline</div>
+            <div class="tab" onclick="showTab('dataflow', this)">Flujo de Datos</div>
+        </div>
+
+        <!-- VISTA GENERAL -->
+        <div id="general" class="tab-content active">
+            <div class="diagram-section">
+                <h2>Arquitectura General del Proyecto</h2>
+                <div class="diagram-box" id="diagram-general"></div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color" style="background:#f0883e"></div>MATLAB Legacy</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#58a6ff"></div>Python Core</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#3fb950"></div>Pipeline Orchestrator</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#bc8cff"></div>Slicer Modules</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#d2a8ff"></div>Configuracion</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#8b949e"></div>Externo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MATLAB -->
+        <div id="matlab" class="tab-content">
+            <div class="diagram-section">
+                <h2>Modulos MATLAB</h2>
+                <div class="diagram-box" id="diagram-matlab"></div>
+            </div>
+        </div>
+
+        <!-- PYTHON -->
+        <div id="python" class="tab-content">
+            <div class="diagram-section">
+                <h2>SlicerDosimLib - Modulos Python</h2>
+                <div class="diagram-box" id="diagram-python"></div>
+            </div>
+        </div>
+
+        <!-- PIPELINE -->
+        <div id="pipeline" class="tab-content">
+            <div class="diagram-section">
+                <h2>Pipeline Orchestrator - 13 Pasos</h2>
+                <div class="diagram-box" id="diagram-pipeline"></div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color" style="background:#238636"></div>Pasos automaticos</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#1f6feb"></div>TotalSegmentator</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#da3633"></div>Validacion medica</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#d29922"></div>Tumor</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FLUJO DE DATOS -->
+        <div id="dataflow" class="tab-content">
+            <div class="diagram-section">
+                <h2>Flujo de Datos - De DICOM a Labelmap</h2>
+                <div class="diagram-box" id="diagram-dataflow"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>3Dosim v3.14 - Dosimetria 3D para Medicina Nuclear</footer>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#161b22',
+                primaryTextColor: '#c9d1d9',
+                primaryBorderColor: '#30363d',
+                lineColor: '#58a6ff',
+                secondaryColor: '#1a1f29',
+                tertiaryColor: '#0d1117',
+                fontFamily: 'Segoe UI, system-ui, sans-serif'
+            },
+            flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+        });
+
+        var diagrams = {
+            'diagram-general': `graph TB
+    subgraph ROOT["3Dosim v3.14"]
+        subgraph MATLAB_BLOCK["MATLAB Legacy"]
+            M1["modulo 1 - Segmentacion y Registro"]
+            M2["modulo 2 - Generacion MCNP"]
+            M3["modulo 3 - Post-procesamiento"]
+            MK["kernel - Calculo de dosis"]
+            MI["ICRP110 - Datos de referencia"]
+            ME["estep - Step size"]
+        end
+        subgraph PYTHON_BLOCK["Python Core"]
+            subgraph SLICER_LIB["SlicerDosimLib"]
+                CFG["config.py"]
+                SEG["segmentation.py"]
+                PHAN["phantom_segmentation.py"]
+                REG["registration.py"]
+                MCNP_ORCH["mcnp_generator.py"]
+                DOSIM["dosimetry.py"]
+                MCTAL["mctal_parser.py"]
+                UTILS["utils.py"]
+            end
+            subgraph ORCH_BLOCK["PipelineOrchestrator"]
+                PIPE["pipeline.py"]
+                MAIN["main.py"]
+                VIEWS["views.py"]
+                CKPT["checkpoint.py"]
+                ANON["anonymize.py"]
+                COUCH["couch_remover.py"]
+                SEG_P["segmentation.py"]
+                VALID["validation.py"]
+                TUMOR["tumor_creator.py"]
+                GITC["git_commit.py"]
+            end
+        end
+        subgraph SLICER_BLOCK["3D Slicer Modules"]
+            SD["SlicerDosim - Modulo 1"]
+            SD2["SlicerDosimMod2 - Modulo 2"]
+            SD3["SlicerDosimMod3 - Modulo 3"]
+        end
+        subgraph CONFIG_BLOCK["Configuracion"]
+            TISSUE["tissue_config.json"]
+            PCFG["pipeline_config.jsonc"]
+            TSCFG["totalsegmentator_config.jsonc"]
+        end
+        subgraph EXTERNAL["Herramientas Externas"]
+            TS["TotalSegmentator"]
+            MONAI["MONAI Label"]
+            ELASTIX["Elastix"]
+            PYD["pydicom"]
+        end
+    end
+    SD --> SLICER_LIB
+    SD2 --> SLICER_LIB
+    SD3 --> SLICER_LIB
+    PIPE --> SLICER_LIB
+    PIPE --> VIEWS
+    PIPE --> CKPT
+    PIPE --> ANON
+    PIPE --> COUCH
+    PIPE --> SEG_P
+    PIPE --> VALID
+    PIPE --> TUMOR
+    PIPE --> GITC
+    CFG --> TISSUE
+    PIPE --> PCFG
+    SEG_P --> TSCFG
+    PIPE --> TS
+    PIPE --> MONAI
+    PIPE --> ELASTIX
+    ANON --> PYD
+    style ROOT fill:#0d1117,stroke:#30363d,color:#c9d1d9
+    style MATLAB_BLOCK fill:#1a1f29,stroke:#f0883e,color:#f0883e
+    style PYTHON_BLOCK fill:#1a1f29,stroke:#58a6ff,color:#58a6ff
+    style SLICER_LIB fill:#161b22,stroke:#58a6ff,color:#79c0ff
+    style ORCH_BLOCK fill:#161b22,stroke:#3fb950,color:#3fb950
+    style SLICER_BLOCK fill:#1a1f29,stroke:#bc8cff,color:#bc8cff
+    style CONFIG_BLOCK fill:#1a1f29,stroke:#d2a8ff,color:#d2a8ff
+    style EXTERNAL fill:#1a1f29,stroke:#8b949e,color:#8b949e`,
+
+            'diagram-matlab': `graph LR
+    subgraph MOD1["modulo 1 - Segmentacion y Registro"]
+        SEG_M["Segmentacion"]
+        REG_M["Registro"]
+    end
+    subgraph MOD2["modulo 2 - Generacion MCNP"]
+        MCNP_M["Generador MCNP"]
+    end
+    subgraph MOD3["modulo 3 - Post-procesamiento"]
+        POST_M["Post-procesamiento"]
+    end
+    subgraph KERNEL["kernel"]
+        KRNL["Calculo de kernel"]
+    end
+    subgraph ICRP["ICRP110"]
+        DATA["Datos de referencia"]
+    end
+    subgraph ESTEP["estep"]
+        STEP["Estimacion step size"]
+    end
+    MOD2 -->|datos de tejidos| MOD3
+    KERNEL -->|kernel de dosis| MOD3
+    ICRP -->|valores de referencia| MOD2
+    ICRP -->|valores de referencia| KERNEL
+    ESTEP -->|step size| MOD2
+    style MOD1 fill:#161b22,stroke:#f0883e,color:#f0883e
+    style MOD2 fill:#161b22,stroke:#f0883e,color:#f0883e
+    style MOD3 fill:#161b22,stroke:#f0883e,color:#f0883e
+    style KERNEL fill:#161b22,stroke:#f0883e,color:#f0883e
+    style ICRP fill:#161b22,stroke:#d29922,color:#d29922
+    style ESTEP fill:#161b22,stroke:#d29922,color:#d29922`,
+
+            'diagram-python': `graph TB
+    subgraph CORE["SlicerDosimLib"]
+        INIT["__init__.py"]
+        CFG["config.py"]
+        TISSUE_JSON["tissue_config.json"]
+        subgraph SEG_GROUP["Segmentacion"]
+            SEG["segmentation.py"]
+            PHAN["phantom_segmentation.py"]
+        end
+        subgraph REG_GROUP["Registro"]
+            REG["registration.py"]
+            PET_REG["pet_registration.py"]
+        end
+        subgraph MCNP_GROUP["Generacion MCNP"]
+            MCNP_ORCH["mcnp_generator.py"]
+            MCNP_MAT["mcnp_materials.py"]
+            MCNP_GEOM["mcnp_geometry.py"]
+            MCNP_SRC["mcnp_source.py"]
+            MCNP_TALLY["mcnp_tallies.py"]
+        end
+        subgraph DOSIM_GROUP["Dosimetria"]
+            DOSIM["dosimetry.py"]
+            MCTAL["mctal_parser.py"]
+            DVH["dvh_analysis.py"]
+        end
+        UTILS["utils.py"]
+    end
+    CFG --> TISSUE_JSON
+    PHAN --> CFG
+    SEG --> CFG
+    MCNP_ORCH --> MCNP_MAT
+    MCNP_ORCH --> MCNP_GEOM
+    MCNP_ORCH --> MCNP_SRC
+    MCNP_ORCH --> MCNP_TALLY
+    DOSIM --> MCTAL
+    style CORE fill:#0d1117,stroke:#58a6ff,color:#58a6ff
+    style SEG_GROUP fill:#161b22,stroke:#58a6ff,color:#79c0ff
+    style REG_GROUP fill:#161b22,stroke:#58a6ff,color:#79c0ff
+    style MCNP_GROUP fill:#161b22,stroke:#3fb950,color:#3fb950
+    style DOSIM_GROUP fill:#161b22,stroke:#d2a8ff,color:#d2a8ff`,
+
+            'diagram-pipeline': `graph TD
+    S1["1. check_slicer"]
+    S2["2. load_dicom"]
+    S3["3. remove_couch_air"]
+    S4["4. resample_pet"]
+    S5["5. show_fusion"]
+    S6["6. anonymize"]
+    S7["7. segment_phantom"]
+    S8["8. validate_segmentation"]
+    S9["9. add_synthetic_tumor"]
+    S10["10. validate_tumor"]
+    S11["11. create_healthy_liver"]
+    S12["12. segment_body"]
+    S13["13. export_labelmap"]
+    STOP1["RECHAZADO"]
+    STOP2["RECHAZADO"]
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    S5 --> S6
+    S6 --> S7
+    S7 --> S8
+    S8 -->|APROBADO| S9
+    S8 -->|RECHAZADO| STOP1
+    S9 --> S10
+    S10 -->|APROBADO| S11
+    S10 -->|RECHAZADO| STOP2
+    S11 --> S12
+    S12 --> S13
+    style S1 fill:#238636,color:#fff
+    style S2 fill:#238636,color:#fff
+    style S3 fill:#238636,color:#fff
+    style S4 fill:#238636,color:#fff
+    style S5 fill:#238636,color:#fff
+    style S6 fill:#238636,color:#fff
+    style S7 fill:#1f6feb,color:#fff
+    style S8 fill:#da3633,color:#fff
+    style S9 fill:#d29922,color:#fff
+    style S10 fill:#da3633,color:#fff
+    style S11 fill:#d29922,color:#fff
+    style S12 fill:#1f6feb,color:#fff
+    style S13 fill:#238636,color:#fff
+    style STOP1 fill:#da3633,color:#fff
+    style STOP2 fill:#da3633,color:#fff`,
+
+            'diagram-dataflow': `graph LR
+    DICOM_IN["DICOM CT y PET"]
+    CT["CT Volume"]
+    PET["PET Volume"]
+    CT_Clean["CT limpio"]
+    PET_Res["PET resample"]
+    FUSION["Fusion PET-CT"]
+    SEG_ORG["Organos TS"]
+    SEG_BODY["Contorno corporal"]
+    TUMOR_S["Tumor sintetico"]
+    LIVER_S["Higado sano"]
+    LABELMAP["Labelmap"]
+    NIFTI["NIfTI output"]
+    NRRD["NRRD output"]
+    SCENE["Escena MRB"]
+    DICOM_IN --> CT
+    DICOM_IN --> PET
+    CT --> CT_Clean
+    PET --> PET_Res
+    CT_Clean --> FUSION
+    PET_Res --> FUSION
+    FUSION --> SEG_ORG
+    CT_Clean --> SEG_BODY
+    SEG_ORG --> TUMOR_S
+    TUMOR_S --> LIVER_S
+    SEG_ORG --> LABELMAP
+    SEG_BODY --> LABELMAP
+    LIVER_S --> LABELMAP
+    TUMOR_S --> LABELMAP
+    LABELMAP --> NIFTI
+    LABELMAP --> NRRD
+    FUSION --> SCENE
+    SEG_ORG --> SCENE
+    style DICOM_IN fill:#8957e5,color:#fff
+    style CT fill:#58a6ff,color:#fff
+    style PET fill:#58a6ff,color:#fff
+    style CT_Clean fill:#3fb950,color:#fff
+    style PET_Res fill:#3fb950,color:#fff
+    style FUSION fill:#d29922,color:#fff
+    style SEG_ORG fill:#1f6feb,color:#fff
+    style SEG_BODY fill:#1f6feb,color:#fff
+    style TUMOR_S fill:#da3633,color:#fff
+    style LIVER_S fill:#238636,color:#fff
+    style LABELMAP fill:#bc8cff,color:#fff
+    style NIFTI fill:#bc8cff,color:#fff
+    style NRRD fill:#bc8cff,color:#fff
+    style SCENE fill:#8b949e,color:#fff`
+        };
+
+        function renderDiagram(containerId, definition) {
+            var container = document.getElementById(containerId);
+            if (!container) return;
+            var graphId = 'graph-' + containerId;
+            mermaid.render(graphId, definition).then(function(result) {
+                container.innerHTML = result.svg;
+            }).catch(function(err) {
+                container.innerHTML = '<pre style="color:#da3633;text-align:left;font-size:0.8rem;">Error: ' + err.message + '</pre>';
+            });
+        }
+
+        function renderAll() {
+            for (var id in diagrams) {
+                renderDiagram(id, diagrams[id]);
+            }
+        }
+
+        function showTab(tabId, el) {
+            document.querySelectorAll('.tab-content').forEach(function(e) { e.classList.remove('active'); });
+            document.querySelectorAll('.tab').forEach(function(e) { e.classList.remove('active'); });
+            document.getElementById(tabId).classList.add('active');
+            el.classList.add('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', renderAll);
+    </script>
+</body>
+</html>

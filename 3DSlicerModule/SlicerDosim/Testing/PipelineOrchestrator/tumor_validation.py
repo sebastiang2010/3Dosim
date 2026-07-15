@@ -23,7 +23,9 @@ def validate_tumor_segmentation(context="sintetico"):
 
     Args:
         context: "sintetico" (default) para tumor generado automaticamente,
-                 otro valor para tumor segmentado manualmente.
+                 "load_file" para tumor cargado de archivo,
+                 "manual" para tumor segmentado manualmente,
+                 "ts_liver_lesions" para tumor automatico con TotalSegmentator.
 
     Raises:
         RuntimeError: Si el medico rechaza la segmentacion tumoral
@@ -71,7 +73,8 @@ def _show_tumor_validation_dialog(context="sintetico") -> bool:
     Slicer COMPLETAMENTE operativo durante la revision.
 
     Args:
-        context: "sintetico" o "manual" — cambia las instrucciones.
+        context: "sintetico", "load_file", "manual" o "ts_liver_lesions"
+                 — cambia las instrucciones del dialogo.
 
     Returns:
         True si el medico aprueba, False si rechaza.
@@ -144,6 +147,24 @@ def _show_tumor_validation_dialog(context="sintetico") -> bool:
                 '1. Navegue slices axial/sagital/coronal<br>'
                 '2. Use la vista 3D para inspeccionar el resultado<br>'
                 '3. Confirme que el volumen segmentado es correcto<br>'
+                '<br>'
+                'Luego APROBAR o RECHAZAR.</p>'
+            )
+        elif 'ts_liver_lesions' in ctx or 'automatico' in ctx:
+            instrucciones_html = (
+                '<p style="color:#555; text-align:center; font-size:12px;">'
+                'Tumor detectado AUTOMATICAMENTE por TotalSegmentator:<br>'
+                '  ✓ Modelo liver_lesions entrenado en ~842 sujetos<br>'
+                '  ✓ Segmento "Tumor_TS" en la segmentacion<br>'
+                '  ✓ Lesiones < 1 cm³ filtradas (ruido)<br>'
+                '  ✓ Segmento verde "higado_sano" (higado - tumor)<br>'
+                '<br>'
+                '<b>Revise la segmentacion automatica:</b><br>'
+                '1. Navegue slices axial/sagital/coronal<br>'
+                '2. Use la vista 3D para inspeccionar las lesiones<br>'
+                '3. Verifique que las lesiones correspondan al PET/CT<br>'
+                '4. Si la segmentacion no es adecuada, marque RECHAZAR<br>'
+                '   y ejecute con --reset usando otro modo de tumor<br>'
                 '<br>'
                 'Luego APROBAR o RECHAZAR.</p>'
             )

@@ -37,9 +37,6 @@ class DosimetryRegistration:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self._ultima_conservacion = None  # Se llena tras register() si activity_conservation=True
-        self.activity_conservation = False
-        self.activity_threshold = 0.0
 
     def register(
         self,
@@ -47,8 +44,6 @@ class DosimetryRegistration:
         moving_node,
         method: str = METHOD_BRAINSFIT,
         output_volume_node=None,
-        activity_conservation: bool = False,
-        activity_threshold: float = 0.0,
     ):
         """
         Ejecuta el registro de imagenes.
@@ -58,18 +53,10 @@ class DosimetryRegistration:
             moving_node: volumen a mover (ej. PET)
             method: metodo de registro
             output_volume_node: nodo de salida (opcional)
-            activity_conservation: si True, conserva la actividad total del PET
-                                   usando mascara corporal implicita (threshold)
-            activity_threshold: valor minimo para considerar un voxel como
-                                "dentro del cuerpo" (default 0.0)
 
         Returns:
             nodo de volumen registrado
         """
-        self.activity_conservation = activity_conservation
-        self.activity_threshold = activity_threshold
-        self._ultima_conservacion = None
-
         method_map = {
             self.METHOD_BRAINSFIT: self._register_brainsfit,
             self.METHOD_ELASTIX: self._register_elastix_bspline,
@@ -140,12 +127,6 @@ class DosimetryRegistration:
         )
 
         self.logger.info(f"  Registro Elastix completado con preset '{preset_id}'")
-
-        # Conservacion de actividad post-registro
-        if self.activity_conservation:
-            metrica = self._conservar_actividad(moving_node, output_node, self.activity_threshold)
-            self._ultima_conservacion = metrica
-
         return output_node
 
     # ------------------------------------------------------------------
@@ -172,15 +153,8 @@ class DosimetryRegistration:
             cli_node = slicer.cli.run(
                 slicer.modules.brainsfit, None, params, wait_for_completion=True
             )
-            output_node = cli_node.GetOutputNode("outputVolume")
             self.logger.info("Registro BrainsFit completado")
-
-            # Conservacion de actividad post-registro
-            if self.activity_conservation:
-                metrica = self._conservar_actividad(moving_node, output_node, self.activity_threshold)
-                self._ultima_conservacion = metrica
-
-            return output_node
+            return cli_node.GetOutputNode("outputVolume")
 
         except Exception as e:
             self.logger.error(f"Error en BrainsFit: {e}")
@@ -215,91 +189,3 @@ class DosimetryRegistration:
         """
         return self._run_elastix(fixed_node, moving_node, output_node,
                                  preset_id=self.PRESET_DEFAULT_ALL)
-
-    # ------------------------------------------------------------------
-    # Conservacion de actividad
-    # ------------------------------------------------------------------
-
-    def _conservar_actividad(self, pet_original_node, pet_registrado_node, activity_threshold: float = 0.0) -> dict:
-        """
-        Conserva la actividad total del PET usando mascara corporal implicita.
-
-        La mascara corporal se define como voxeles con valor > activity_threshold
-        (default 0.0 = cualquier actividad detectable).
-
-        Args:
-            pet_original_node: nodo PET antes del registro
-            pet_registrado_node: nodo PET despues del registro
-            activity_threshold: umbral minimo para considerar "cuerpo"
-
-        Returns:
-            dict con:
-                - 'actividad_original_bq': actividad total pre-registro (solo mascara)
-                - 'actividad_sin_corregir_bq': actividad post-registro sin correccion
-                - 'actividad_final_bq': actividad post-registro con correccion
-                - 'factor_conservacion': factor multiplicativo aplicado
-                - 'diff_pct': error de conservacion %
-                - 'body_voxels_original': cantidad de voxeles en mascara original
-                - 'body_voxels_registrado': cantidad de voxeles en mascara registrada
-        """
-        import numpy as np
-        import slicer
-
-        # Extraer arrays
-        arr_orig = slicer.util.arrayFromVolume(pet_original_node)
-        arr_reg = slicer.util.arrayFromVolume(pet_registrado_node)
-
-        spacing_orig = pet_original_node.GetSpacing()
-        spacing_reg = pet_registrado_node.GetSpacing()
-
-        # Volumen de voxel en mL
-        voxel_vol_orig_mL = spacing_orig[0] * spacing_orig[1] * spacing_orig[2] / 1000.0
-        voxel_vol_reg_mL = spacing_reg[0] * spacing_reg[1] * spacing_reg[2] / 1000.0
-
-        # Mascara corporal implicita: voxeles con actividad > threshold
-        mask_orig = arr_orig > activity_threshold
-        mask_reg = arr_reg > activity_threshold
-
-        # Actividad total solo dentro de la mascara
-        act_orig = float(np.sum(arr_orig[mask_orig])) * voxel_vol_orig_mL
-        act_sin_corregir = float(np.sum(arr_reg[mask_reg])) * voxel_vol_reg_mL
-
-        if act_sin_corregir > 0:
-            factor = act_orig / act_sin_corregir
-        else:
-            factor = 1.0
-            self.logger.warning("PET registrado sin actividad detectable - no se puede conservar")
-
-        # Aplicar factor
-        arr_reg_corregido = arr_reg * factor
-
-        # Escribir de vuelta al nodo
-        slicer.util.updateVolumeFromArray(pet_registrado_node, arr_reg_corregido)
-
-        # Verificar conservacion
-        act_final = float(np.sum(arr_reg_corregido[mask_reg])) * voxel_vol_reg_mL
-        diff_pct = abs(act_final - act_orig) / max(act_orig, 1.0) * 100
-
-        metrica = {
-            'actividad_original_bq': act_orig,
-            'actividad_sin_corregir_bq': act_sin_corregir,
-            'actividad_final_bq': act_final,
-            'factor_conservacion': factor,
-            'diff_pct': diff_pct,
-            'body_voxels_original': int(mask_orig.sum()),
-            'body_voxels_registrado': int(mask_reg.sum()),
-        }
-
-        self.logger.info(f"  Conservacion de actividad (mascara corporal, threshold={activity_threshold}):")
-        self.logger.info(f"    Actividad original:       {act_orig:.4e}")
-        self.logger.info(f"    Actividad sin corregir:   {act_sin_corregir:.4e}")
-        self.logger.info(f"    Factor de conservacion:   {factor:.6f}")
-        self.logger.info(f"    Actividad final:          {act_final:.4e}")
-        self.logger.info(f"    Error de conservacion:    {diff_pct:.4f}%")
-
-        return metrica
-
-    @property
-    def ultima_conservacion(self):
-        """Retorna las metricas de la ultima conservacion de actividad (None si no se ejecuto)."""
-        return self._ultima_conservacion

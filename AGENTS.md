@@ -394,6 +394,10 @@ Commit: `b6aa7a8` - "eliminar test extras fusion_test, fusion_simple, test_ts_st
 - Trackeados ai_supervisor.py, pet_registration.py, pipeline_fusion.py (nuevos)
 - Committed cambios pendientes de sesiones anteriores (8 archivos .py)
 
+## Reglas importantes
+
+- **NO modificar archivos dentro de este directorio (v3.14)** — es versión estable/legacy. Todo el desarrollo activo está en `3Dosim_v4/`.
+
 ## Comandos utiles
 - `/remember [tag] mensaje` - Guardar progreso en memoria persistente
 # UPDATE_PIPELINE_VISUALIZATION_AND_SCENES.md

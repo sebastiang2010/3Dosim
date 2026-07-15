@@ -1,10 +1,11 @@
 """
 Gestion de tumor en el pipeline 3Dosim.
-Soporta 3 modos configurados desde pipeline_config.jsonc:
+Soporta 4 modos configurados desde pipeline_config.jsonc:
 
-  "synthetic"  → Tumor esferico automatico en el higado (default)
-  "load_file"  → Carga tumor desde archivo NIfTI
-  "manual"     → El usuario segmenta el tumor en 3D Slicer
+  "synthetic"        → Tumor esferico automatico en el higado (default)
+  "load_file"        → Carga tumor desde archivo NIfTI
+  "manual"           → El usuario segmenta el tumor en 3D Slicer
+  "ts_liver_lesions" → Segmentacion automatica con TotalSegmentator liver_lesions
 
 En todos los modos, opcionalmente genera higado_sano = higado - tumor.
 
@@ -98,10 +99,15 @@ def create_tumor(
             segmentation_node, ct_node, tumor_config,
             liver_mask, liver_volume_cc, voxel_vol_cc, spacing,
         )
+    elif mode == "ts_liver_lesions":
+        result = _do_ts_liver_lesions(
+            segmentation_node, ct_node, tumor_config,
+            liver_mask, liver_volume_cc, voxel_vol_cc, spacing,
+        )
     else:
         raise ValueError(
             f"Modo de tumor desconocido: '{mode}'. "
-            "Opciones validas: 'synthetic', 'load_file', 'manual'"
+            "Opciones validas: 'synthetic', 'load_file', 'manual', 'ts_liver_lesions'"
         )
 
     result["mode"] = mode
@@ -469,6 +475,139 @@ def _do_manual(
         "tumor_segment_name": segment_name,
         "tumor_outside_liver_voxels": int(tumor_outside),
         "_tumor_mask": tumor_mask,
+    }
+
+
+# ======================================================================
+# MODO 4: SEGMENTACION AUTOMATICA CON TOTALSEGMENTATOR LIVER_LESIONS
+# ======================================================================
+
+def _do_ts_liver_lesions(
+    segmentation_node, ct_node, tumor_config,
+    liver_mask, liver_volume_cc, voxel_vol_cc, spacing,
+) -> dict:
+    """
+    Segmenta tumor hepatico automaticamente usando TotalSegmentator task='liver_lesions'.
+
+    Flujo:
+      1. Corre TotalSegmentator con task='liver_lesions' sobre el CT
+      2. Obtiene mascara binaria de lesiones
+      3. Enmascara solo dentro del higado
+      4. Filtra lesiones menores a min_volume_cc (ruido)
+      5. Agrega como segmento "Tumor_TS"
+    """
+    segment_name = tumor_config.get("ts_liver_lesions_segment_name", "Tumor_TS")
+    segment_color = tumor_config.get("ts_liver_lesions_segment_color", [1.0, 0.2, 0.2])
+    min_volume_cc = tumor_config.get("ts_liver_lesions_min_volume_cc", 1.0)
+
+    import slicer
+    import numpy as np
+    import vtk
+
+    logger.info("  Modo: AUTOMATICO — TotalSegmentator task='liver_lesions'")
+
+    # --- 1. Crear nodo de segmentacion temporal para TS ---
+    ts_seg_node = slicer.mrmlScene.AddNewNodeByClass(
+        "vtkMRMLSegmentationNode", "__temp_ts_liver_lesions__"
+    )
+    # Referenciar geometria del CT
+    ts_seg_node.SetReferenceImageGeometryParameterFromVolumeNode(ct_node)
+
+    # --- 2. Ejecutar TotalSegmentator ---
+    logger.info("  Ejecutando TotalSegmentator task='liver_lesions'...")
+    logger.info("  (modelo entrenado en ~842 sujetos con lesiones hepaticas)")
+    try:
+        slicer.util.selectModule("TotalSegmentator")
+        from TotalSegmentator import TotalSegmentatorLogic
+        logic = TotalSegmentatorLogic()
+        logic.setupPythonRequirements()
+        logic.process(
+            inputVolume=ct_node,
+            outputSegmentation=ts_seg_node,
+            task="liver_lesions",
+            fast=True,
+            cpu=tumor_config.get("force_cpu", True),
+            interactive=False,
+        )
+    except Exception as e:
+        slicer.mrmlScene.RemoveNode(ts_seg_node)
+        raise RuntimeError(
+            f"TotalSegmentator liver_lesions fallo: {e}"
+        ) from e
+
+    # --- 3. Convertir segmentacion TS a numpy array ---
+    logger.info("  Procesando resultado de liver_lesions...")
+    try:
+        # Obtener labelmap del segmentation node
+        labelmap_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLLabelMapVolumeNode", "__temp_ts_labelmap__"
+        )
+        slicer.modules.segmentations.logic().ExportAllSegmentsToLabelmapNode(
+            ts_seg_node, labelmap_node, ct_node
+        )
+        arr = slicer.util.arrayFromVolume(labelmap_node).astype(np.uint8)
+        slicer.mrmlScene.RemoveNode(labelmap_node)
+    except Exception as e:
+        slicer.mrmlScene.RemoveNode(ts_seg_node)
+        raise RuntimeError(f"Error extrayendo labelmap de TS: {e}") from e
+
+    slicer.mrmlScene.RemoveNode(ts_seg_node)
+
+    # --- 4. Enmascarar solo dentro del higado ---
+    tumor_mask = (arr > 0) & (liver_mask > 0)
+    if not tumor_mask.any():
+        logger.warning("  liver_lesions: sin lesiones dentro del higado.")
+        # Crear mascara vacia para que el pipeline continue
+        tumor_mask = np.zeros(liver_mask.shape, dtype=np.uint8)
+        n_lesions = 0
+        total_voxels = 0
+        total_volume_cc = 0.0
+        logger.warning("  Se creara tumor vacio (0 voxeles). Pipeline continuara.")
+    else:
+        # --- 5. Filtrar lesiones por volumen minimo ---
+        from scipy import ndimage as ndi
+
+        labeled, num_features = ndi.label(tumor_mask)
+        min_voxels = max(1, int(min_volume_cc / voxel_vol_cc))
+
+        result = np.zeros_like(tumor_mask, dtype=np.uint8)
+        lesion_count = 0
+        for i in range(1, num_features + 1):
+            lesion_voxels = int(np.sum(labeled == i))
+            if lesion_voxels >= min_voxels:
+                result[labeled == i] = 1
+                lesion_count += 1
+
+        tumor_mask = result.astype(np.uint8)
+        n_lesions = lesion_count
+        total_voxels = int(np.sum(tumor_mask))
+        total_volume_cc = total_voxels * voxel_vol_cc
+
+        logger.info(f"  Lesiones detectadas: {n_lesions}")
+        logger.info(f"  Volumen total tumoral: {total_volume_cc:.2f} cm^3")
+        if n_lesions == 0:
+            logger.warning("  Todas las lesiones eran menores a {:.1f} cm^3 y fueron filtradas.".format(
+                min_volume_cc))
+
+    # --- 6. Agregar tumor como segmento ---
+    if total_voxels > 0:
+        _add_mask_as_segment(
+            segmentation_node, ct_node, tumor_mask,
+            segment_name=segment_name,
+            color=segment_color,
+        )
+    else:
+        # Segmento vacio (para que el pipeline no falle en pasos posteriores)
+        logger.warning(f"  Agregando segmento '{segment_name}' VACIO (0 voxeles)")
+        seg = segmentation_node.GetSegmentation().AddEmptySegment(segment_name)
+        seg.SetColor(segment_color)
+
+    return {
+        "tumor_lesion_count": n_lesions,
+        "tumor_min_volume_cc": min_volume_cc,
+        "tumor_voxels": int(total_voxels),
+        "tumor_volume_cc": round(total_volume_cc, 2),
+        "_tumor_mask": tumor_mask.astype(bool) if isinstance(tumor_mask, np.ndarray) else tumor_mask,
     }
 
 

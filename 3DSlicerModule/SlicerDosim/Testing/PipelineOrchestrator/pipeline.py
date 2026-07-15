@@ -380,6 +380,7 @@ class PipelineTestOrchestrator:
             "synthetic": "Tumor sintetico esferico en higado",
             "load_file": "Cargar tumor desde archivo NIfTI",
             "manual": "Segmentacion manual del tumor en Slicer",
+            "ts_liver_lesions": "Segmentacion automatica con TotalSegmentator liver_lesions",
         }
         step_label = mode_labels.get(tumor_mode, f"Tumor (modo: {tumor_mode})")
         self._log_consola(f"Creando tumor (modo: {tumor_mode})...")
@@ -392,6 +393,7 @@ class PipelineTestOrchestrator:
             "synthetic": "09_tumor_sintetico",
             "load_file": "09_tumor_cargado",
             "manual": "09_tumor_manual",
+            "ts_liver_lesions": "09_tumor_automatico",
         }
         self._save_scene(scene_tag_map.get(tumor_mode, "09_tumor"))
         self.tomar_screenshot(scene_tag_map.get(tumor_mode, "09_tumor"))
@@ -522,6 +524,8 @@ class PipelineTestOrchestrator:
                 self.tumor_config.get("load_file_path", "N/A")))
         elif tumor_mode == "manual":
             logger.info("    8. Tumor segmentado manualmente en Slicer")
+        elif tumor_mode == "ts_liver_lesions":
+            logger.info("    8. Tumor automatico con TotalSegmentator liver_lesions")
         logger.info("    9. Validacion medica del tumor")
         if self.tumor_config.get("create_healthy_liver", True):
             logger.info("   10. Higado sano = higado - tumor")

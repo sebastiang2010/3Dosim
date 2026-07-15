@@ -4,7 +4,7 @@
     "screenshot_output_dir": "C:/MAT/3Dosim/ai-pipe/screenshots",
     "image_output_dir": "C:/MAT/3Dosim/ai-pipe/exports",
     "mcnp_output_dir": "C:/MAT/3Dosim/ai-pipe/mcnp_input",
-    "results_dir_rel": "C:/MAT/3Dosim/ai-pipe/resultados_dosimetria",
+    "results_dir_rel": "../resultados_test",
     "tissue_config_path": "Resources/Config/tissue_config.json",
     "source_file_path": "C:/MAT/3Dosim/ai-pipe/mcnp_input/Y90cel3D.src",
     "ct_dir": "C:\\MAT\\3Dosim\\pacientes-\\pacientes\\Paciente_2\\CT",
